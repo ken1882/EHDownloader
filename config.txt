@@ -2,7 +2,7 @@
   :search_options => { # do not remove this
 
     :filter => %{
-      female:dragon$ chinese
+      
     },
 
     :types => {
@@ -21,7 +21,7 @@
     :s_name       => 1,
     :s_tags       => 1,
     :s_deleted    => 1,
-    :min_star     => 3,
+    :min_star     => 1,
     :page_between => [1, 9999],
     
   }, # do not remove this

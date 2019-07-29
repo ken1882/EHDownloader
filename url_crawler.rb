@@ -7,7 +7,10 @@ FailedImage   = Struct.new(:page_url, :id, :folder, :hd)
 FailedGallery = Struct.new(:gid, :token, :folder)
 DownloadFolder = "Downloads/"
 
+$fetch_loose_threshold = 2
+$fetch_sleep_time      = 4
 $mutex = Mutex.new
+$fetched_cnt = 0
 $existed_keys
 
 # fix windows getrlimit not implement bug
@@ -23,6 +26,13 @@ require 'open-uri'
 require 'json'
 require 'io/console'
 require 'net/http'
+require 'win32api'
+
+GetAsyncKeyState = Win32API.new('user32', "GetAsyncKeyState", 'i', 'i')
+
+def key_triggered?(vt)
+  return (GetAsyncKeyState.call(vt) & 0x8000) != 0
+end
 
 def warning(*args)
   return if $no_warning
@@ -78,6 +88,32 @@ def eval_action(load_msg='', &block)
   puts("succeed")
 end
 
+# Check if banned, and wait if true
+def check_wait_ban(page)
+  while page.links.size == 0
+    puts "#{SPLIT_LINE}Traffic overloaded! Sleep for 1 hour to wait the ban expires"
+    puts "Press `C` to force continue"
+    watied = 0
+    while watied < 60 * 60
+      sleep(0.05)
+      watied += 0.05
+      if key_triggered?('c'.ord)
+        puts "Trying reconnect..."
+        page = fetch(page.uri)
+        if page.links.size == 0
+          puts "Ban still remains! Response Body:"
+          puts page.body + 10.chr
+        else
+          puts "Succeed!"
+          break
+        end
+      end
+    end # while waiting
+    page = fetch(page.uri)
+  end
+  return page
+end
+
 # core_ext
 class Object
   def boolean?; self == true || self == false; end
@@ -119,6 +155,12 @@ class Agent < Mechanize
     depth = 0
     _ok   = false
     _doc  = nil
+    $mutex.synchronize{$fetched_cnt += 1}
+    if $fetch_loose_threshold > 0 && $fetched_cnt >= $fetch_loose_threshold
+      puts("\nFetched count > #{$fetch_loose_threshold}, sleep for #{$fetch_sleep_time} seconds to loose traffic")
+      $mutex.synchronize{$fetched_cnt = 0}
+      sleep($fetch_sleep_time)
+    end
     until _ok do
       begin
         depth += 1
@@ -162,18 +204,28 @@ class Agent < Mechanize
   end
 
   def collect_metas
+    @current_doc = check_wait_ban(@current_doc)
     re  = @current_doc.links_with(href: /https:\/\/e-hentai.org\/g\//).uniq{|l| l.href}
+    scanned_cnt = 0
     re.each do |link|
       _url = link.href.split('/')
       gid, token = _url[-2].to_i, _url[-1]
-      $mutex.synchronize{$download_targets << {'gid' => gid, 'token' => token}}
+      unless EHentaiDownloader.config[:meta_only]
+        $mutex.synchronize{$download_targets << {'gid' => gid, 'token' => token}}
+      end
       if meta_exist?(gid)
         puts "#{gid}/#{token} is already existed, skipping"
         $mutex.synchronize{$existed_gal_cnt += 1}
         next
       end
       $mutex.synchronize{
-        @new_json << {'gid' => gid, 'token' => token}
+        begin
+          @new_json << {'gid' => gid, 'token' => token}
+        rescue Exception
+          @new_json.pop
+          puts "Out of memory...output to tmp json file"
+          EHentaiDownloader.output_oom_metas()
+        end
       }
     end
   end
@@ -290,7 +342,7 @@ end
 
 module EHentaiDownloader
   mattr_reader :agent_head, :agent_tail, :config, :cur_folder
-  mattr_reader :existed_json, :cookies, :current_doc
+  mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
 
   GalleryURLRegex = /https:\/\/e-hentai.org\/g\/(\d+)\/(.+)/i
   ResultJsonFilename = "_metadata.json"
@@ -424,7 +476,6 @@ module EHentaiDownloader
   def load_filter_config()
     filter = modify_filter(search_options(:filter))
     search_options[:filter] = filter
-    p filter
   end
 
   def modify_filter(filter)
@@ -483,6 +534,11 @@ module EHentaiDownloader
   end
 
   def get_total_number()
+    if @current_doc.links.size == 0
+      puts @current_doc.body
+      puts "Traffic overloaded...please wait for the ban exipres or switch your cookie."
+      exit()
+    end
     puts @current_doc.css("[@class='ip']")[0].text
     return false unless @current_doc.css("[@class='ip']")[0].text.match(TotalResult_regex)
     @total_num = $1.tr(',','').strip.to_i
@@ -496,7 +552,7 @@ module EHentaiDownloader
     @new_json = []
     @agent_head.new_json = @agent_tail.new_json = @new_json
 
-    eval_action("Getting `#{_url}`...") do
+    eval_action("") do
       @current_doc = @agent_head.fetch(_url)
     end
     get_total_number()
@@ -522,12 +578,22 @@ module EHentaiDownloader
     @agent_head.end_page = @agent_tail.start_page = mid
     @agent_tail.end_page = total_pages
     puts "Head: page#{@agent_head.start_page}~page#{mid}; Tail: page#{mid}~page#{total_pages}"
-    Thread.new{@agent_tail.start_scan()}
+    @worker = Thread.new{@agent_tail.start_scan()}
     @agent_head.start_scan()
     sleep(1)
   end
 
-  def output_metas
+  def output_oom_metas()
+    puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
+    cnt = 0
+    cnt+= 1 while File.exist?("_meta_tmp_#{cnt}.json")
+    File.open("_meta_tmp_#{cnt}.json", 'w') do |file|
+      file.puts(@new_json.to_json)
+    end
+    puts "Collected meta has output to `_meta_tmp_#{cnt}.json`"
+  end
+
+  def output_metas()
     puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
     @existed_json += @new_json
     @new_json = nil
@@ -681,8 +747,18 @@ module EHentaiDownloader
   end
 end
 
-EHentaiDownloader.initialize
-EHentaiDownloader.start_scan
+begin
+  EHentaiDownloader.initialize
+  EHentaiDownloader.start_scan
+rescue SystemExit, Interrupt
+  if EHentaiDownloader.new_json.size > 0
+    Thread.kill(EHentaiDownloader.worker)
+    puts "#{SPLIT_LINE}An attempt to abort is detected but meta is still collecting,"
+    print "do you want to dump them to a tmp file? (Y/N)"
+    request_continue(nil, no: method(:exit_res))
+    EHentaiDownloader.output_oom_metas()
+  end
+end
 
 # File.open("tmp.txt", 'w') do |file|
 #   file.puts JSON.pretty_generate()
