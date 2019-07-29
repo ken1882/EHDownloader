@@ -27,6 +27,6 @@
   }, # do not remove this
 
   :download_original => 0,
-  :meta_only         => 0,
+  :meta_only         => 1,
   :english_title     => 0,
 }

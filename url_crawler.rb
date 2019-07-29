@@ -169,6 +169,7 @@ class Agent < Mechanize
       $mutex.synchronize{$download_targets << {'gid' => gid, 'token' => token}}
       if meta_exist?(gid)
         puts "#{gid}/#{token} is already existed, skipping"
+        $mutex.synchronize{$existed_gal_cnt += 1}
         next
       end
       $mutex.synchronize{
@@ -438,7 +439,11 @@ module EHentaiDownloader
         re += ch
       end
     end
-    re.delete_suffix!('+') until re[-1] != '+'
+    if String.respond_to?(:delete_suffix)
+      re.delete_suffix!('+') until re[-1] != '+'
+    else
+      re.chomp!('+') until re[-1] != '+'
+    end
     return re
   end
 
@@ -510,6 +515,7 @@ module EHentaiDownloader
   end
 
   def collect_metas
+    $existed_gal_cnt = 0
     total_pages = (@total_num / 25.0).ceil
     puts "Total pages: #{total_pages}"
     mid = total_pages / 2
@@ -522,12 +528,13 @@ module EHentaiDownloader
   end
 
   def output_metas
-    puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos"
+    puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
     @existed_json += @new_json
     @new_json = nil
     File.open(ResultJsonFilename, 'w') do |file|
       file.puts(JSON.pretty_generate(@existed_json))
     end
+    puts "Total of #{@existed_json.size} gallery infos saved."
   end
 
   def start_download
