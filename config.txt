@@ -1,0 +1,32 @@
+{
+  :search_options => { # do not remove this
+
+    :filter => %{
+      female:dragon$ chinese
+    },
+
+    :types => {
+      :misc       => 0,
+      :doujinshi  => 1,
+      :manga      => 1,
+      :arist_cg   => 1,
+      :game_cg    => 1,
+      :image_set  => 1,
+      :cosplay    => 1,
+      :asian_porn => 1,
+      :non_h      => 1,
+      :western    => 1
+    },
+
+    :s_name       => 1,
+    :s_tags       => 1,
+    :s_deleted    => 1,
+    :min_star     => 3,
+    :page_between => [1, 9999],
+    
+  }, # do not remove this
+
+  :download_original => 0,
+  :meta_only         => 0,
+  :english_title     => 0,
+}
