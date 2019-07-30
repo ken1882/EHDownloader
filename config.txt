@@ -1,10 +1,12 @@
 {
   :search_options => { # do not remove this
 
+    # 關鍵字搜尋
     :filter => %{
-      
+      female:dragon$
     },
 
+    # 類別 (1:搜尋 0:不搜尋, 以下的0/1的功能除非特別註明否則皆同)
     :types => {
       :misc       => 0,
       :doujinshi  => 1,
@@ -18,15 +20,38 @@
       :western    => 1
     },
 
+    # 搜尋名稱
     :s_name       => 1,
+
+    # 搜尋tag
     :s_tags       => 1,
+
+    # 搜尋被刪除的本本
     :s_deleted    => 1,
-    :min_star     => 1,
+
+    # 最低評價星級
+    :min_star     => 3,
+
+    # 本本頁數 (預設為1~9999頁)
     :page_between => [1, 9999],
     
   }, # do not remove this
 
-  :download_original => 0,
-  :meta_only         => 1,
-  :english_title     => 0,
+  # 下載原圖需要登入的cookie, 若啟用則會因為流量大而容易被ban
+  :download_original      => 0,
+
+  # 僅蒐尋本本meta資料, 不載圖
+  :meta_only              => 0,
+
+  # 下載圖片時的資料夾名稱使用全英文
+  :english_title          => 0,
+
+  # 每傳輸N次休息一次 (預設N=2)
+  :fetch_loose_threshold  => 2,
+
+  # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
+  :fetch_sleep_time       => 10,
+
+  # 額外的隨機休息秒數增加(0~N秒, 預設3)
+  :fetch_sleep_rrange     => 3,
 }

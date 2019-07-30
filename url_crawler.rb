@@ -5,13 +5,16 @@ SPLIT_LINE = '-'*21 + 10.chr
 
 FailedImage   = Struct.new(:page_url, :id, :folder, :hd)
 FailedGallery = Struct.new(:gid, :token, :folder)
+MainThread    = Thread.current
 DownloadFolder = "Downloads/"
+VK_F5 = 0x74
 
 $fetch_loose_threshold = 2
-$fetch_sleep_time      = 4
+$fetch_sleep_time      = 10
+$fetch_sleep_rrange    = 3
 $mutex = Mutex.new
 $fetched_cnt = 0
-$existed_keys
+$worker_cur_url = ['', '']
 
 # fix windows getrlimit not implement bug
 if Gem.win_platform?
@@ -27,6 +30,7 @@ require 'json'
 require 'io/console'
 require 'net/http'
 require 'win32api'
+require 'digest'
 
 GetAsyncKeyState = Win32API.new('user32', "GetAsyncKeyState", 'i', 'i')
 
@@ -47,18 +51,17 @@ def request_continue(msg='', **kwargs)
   _ch = STDIN.getch.upcase until _ch == 'Y' || _ch == 'N'
   puts _ch
   if _ch == 'N'
-    return exit() unless kwargs[:no]
-    kwargs[:no].call()
+    kwargs[:no].call() if kwargs[:no]
   elsif kwargs[:yes]
     kwargs[:yes].call()
   end
 end
 
-alias exit_res exit
+alias exit_exh exit
 def exit(*args)
   puts("Press any key to exit...")
   STDIN.getch
-  exit_res(*args)
+  exit_exh(*args)
 end
 
 # Request gallery meta with API
@@ -97,7 +100,7 @@ def check_wait_ban(page)
     while watied < 60 * 60
       sleep(0.05)
       watied += 0.05
-      if key_triggered?('c'.ord)
+      if key_triggered?(VK_F5)
         puts "Trying reconnect..."
         page = fetch(page.uri)
         if page.links.size == 0
@@ -114,14 +117,53 @@ def check_wait_ban(page)
   return page
 end
 
+def input(msg='')
+  print(msg)
+  return STDIN.gets.chomp
+end
+
+def to_readable_time_distance(delta_sec)
+  seconds = delta_sec % 60
+  delta_sec = delta_sec.to_i
+  minutes = delta_sec / 60
+  hours   = minutes / 60; minutes %= 60;
+  days    = hours / 24; hours %= 24;
+  return sprintf("#{days} days, %02d:%02d:%.3f", hours, minutes, seconds)
+end
+
 # core_ext
 class Object
   def boolean?; self == true || self == false; end
 end
 
+class Array
+  def first=(_v); self[0]=_v; end
+  def last=(_v); self[-1]=_v; end
+end
+
 class Integer
   def to_fileid(deg=4) # %04d
     return sprintf("%0#{deg}d", self)
+  end
+end
+
+class Thread
+  @@thread_pool = []
+  alias init_exh initialize
+  def initialize(*args, **kwargs, &block)
+    @@thread_pool << self.object_id
+    init_exh(*args, **kwargs, &block)
+    ObjectSpace.define_finalizer(self, Thread.method(:_finalize))
+  end
+
+  def self._finalize(obj_id)
+     @@thread_pool.delete(obj_id)
+  end
+
+  def self.kill_all
+    @@thread_pool.each do |oid|
+      kill(ObjectSpace._id2ref(oid))
+    end
   end
 end
 
@@ -133,7 +175,6 @@ class Agent < Mechanize
   def initialize(*args)
     @current_doc = nil
     @flag_working = false
-    @failed   = []
     @cur_page = 0
     @search_param = ''
     @start_page = @end_page = 0
@@ -156,10 +197,11 @@ class Agent < Mechanize
     _ok   = false
     _doc  = nil
     $mutex.synchronize{$fetched_cnt += 1}
-    if $fetch_loose_threshold > 0 && $fetched_cnt >= $fetch_loose_threshold
-      puts("\nFetched count > #{$fetch_loose_threshold}, sleep for #{$fetch_sleep_time} seconds to loose traffic")
+    if !kwargs[:no_loose] && $fetch_loose_threshold > 0 && $fetched_cnt >= $fetch_loose_threshold
+      _slpt = $fetch_sleep_time + rand($fetch_sleep_rrange) + rand().round(2)
+      puts("\nFetched count > #{$fetch_loose_threshold}, sleep for #{_slpt} seconds to loose traffic")
       $mutex.synchronize{$fetched_cnt = 0}
-      sleep($fetch_sleep_time)
+      sleep(_slpt)
     end
     until _ok do
       begin
@@ -175,6 +217,9 @@ class Agent < Mechanize
       rescue Mechanize::ResponseCodeError => err
         warning("\nReceived response code #{err.response_code}, retrying...(depth=#{depth})")
         sleep(0.3)
+      rescue SystemExit, Interrupt => err
+        sleep(3600) until Thread.current == ::MainThread
+        raise err
       rescue Exception => err
         warning("\nAn error occurred during fetch page! #{err}, retrying...(depth=#{depth})")
         sleep(0.3)
@@ -234,19 +279,47 @@ class Agent < Mechanize
     return @existed_json.any?{|obj| obj['gid'] == gid}
   end
 
+  def load_prev_progress
+    _url = ''
+    puts "#{@cur_folder}/_progress.dat: #{::File.exist?("#{@cur_folder}/_progress.dat")}"
+    if ::File.exist?("#{@cur_folder}/_progress.dat")
+      ::File.open("#{@cur_folder}/_progress.dat", 'rb') do |file|
+        _dat = Marshal.load(file)
+        _url = (@end_page > @start_page ? _dat.first : _dat.last)
+        puts "Prev progress loaded: #{_url}"
+      end
+    end
+    return _url
+  end
+
+  def clear_progress
+    return unless ::File.exist?("#{@cur_folder}/_progress.dat")
+    ::File.delete("#{@cur_folder}/_progress.dat")
+  end
+
   def start_download(init_url, gid, token)
     @flag_working = true
-    @current_doc  = fetch(init_url, fallback: Proc.new{on_fetch_failed(init_url)})
-    @cur_page     = @start_page
-    @cur_folder   = EHentaiDownloader.cur_folder
+    @cur_folder = EHentaiDownloader.cur_folder
     @cur_gid, @cur_token = gid, token
+    eval_action("Check previous progress...") do 
+       _url = load_prev_progress()
+       _url = init_url.to_s if _url.length < 10
+       @current_doc = fetch(_url, fallback: Proc.new{on_fetch_failed(_url)})
+    end
+    @cur_page = @current_doc.uri.to_s.split('-').last.to_i
     loop do
       break if @current_doc.nil?
       @cur_parent_url = @current_doc.uri
       dowload_current_image()
       wait4download()
       break if @end_page == @cur_page
-      @cur_page += (@end_page > @start_page ? 1 : -1)
+      if @end_page > @start_page
+        @cur_page += 1
+        $worker_cur_url.first = @cur_parent_url.to_s
+      elsif @end_page < @start_page
+        @cur_page -= 1
+        $worker_cur_url.last  = @cur_parent_url.to_s
+      end
       next_link = get_next_link()
       @current_doc = fetch(next_link, fallback: Proc.new{on_fetch_failed(next_link)})
     end
@@ -281,12 +354,13 @@ class Agent < Mechanize
     if ::File.exist?(filename)
       return puts("#{filename} already exists, skip")
     end
-    img = self.fetch(img_url, fallback: Proc.new{on_download_failed(@cur_parent_url)})
+    img = self.fetch(img_url, fallback: Proc.new{on_download_failed(@cur_parent_url)}, no_loose: true)
     unless img.is_a?(::Mechanize::Image)
       warning("Unable to get original image from #{@cur_parent_url}, please check your cookie or download limits!")
       return
     end
     img.save(filename)
+    puts "#{filename} saved"
   end
 
   def wait4download()
@@ -317,6 +391,7 @@ class Agent < Mechanize
       @cur_page       = info.id
       @cur_folder     = info.folder
       @current_doc = fetch(@cur_parent_url, fallback: Proc.new{on_fetch_failed( @cur_parent_url)})
+      Dir.mkdir(@cur_folder) unless ::File.exist?(@cur_folder)
       dowload_current_image(info.hd)
       wait4download()
     end
@@ -367,8 +442,9 @@ module EHentaiDownloader
   def initialize
     @agent_head = Agent.new
     @agent_tail = Agent.new
-    @mutex = Mutex.new
-    @failed   = []
+    $fetched_cnt = 0
+    $failed_images    ||= []
+    $failed_galleries ||= []
     @config   = {
       :search_options => {
         :types => { # search types
@@ -391,11 +467,14 @@ module EHentaiDownloader
         :s_deleted    => true,
         :min_star     => 0,
         :page_between => [1, 9999],
-        :english_title => false,
       },
 
-      :download_original => false,
-      :meta_only         => false,
+      :english_title          => false,
+      :download_original      => false,
+      :meta_only              => false,
+      :fetch_loose_threshold  => 2,
+      :fetch_sleep_time       => 10,
+      :fetch_sleep_rrange     => 3,
     }
     eval_action("Loading config file..."){load_config()}
     eval_action("Loading cookie..."){load_cookie()}
@@ -422,6 +501,18 @@ module EHentaiDownloader
     return @config[:search_options][sym]
   end
 
+  def get_config_hash(parent=@config)
+    re = '_cfg_'
+    parent.each do |k, v|
+      if v.respond_to?(:each)
+        re += get_config_hash(v)
+      else
+        re += k.to_s + v.to_s
+      end
+    end
+    return Digest::SHA256.hexdigest(re)
+  end
+
   def load_config
     unless File.exist?("./config.txt")
       warning("Search option file not found, this will cause the program to grab >>ALL<< gallery infos!")
@@ -445,6 +536,9 @@ module EHentaiDownloader
       translate_config(@config, _config)
       load_type_config()
       load_filter_config()
+      $fetch_loose_threshold = @config[:fetch_loose_threshold]
+      $fetch_sleep_time      = @config[:fetch_sleep_time]
+      $fetch_sleep_rrange    = @config[:fetch_sleep_rrange]
     end # File.open
   end
 
@@ -556,13 +650,16 @@ module EHentaiDownloader
       @current_doc = @agent_head.fetch(_url)
     end
     get_total_number()
-    request_continue("#{SPLIT_LINE}Searched with #{@total_num} results")
-
+    _continue = true
+    request_continue("#{SPLIT_LINE}Searched with #{@total_num} results", no: Proc.new{_continue = false})
+    return unless _continue
     @prev_size = @existed_json.size
+    $meta_start_time = Time.now
     collect_metas()
     sleep(1) while @agent_head.working? || @agent_tail.working?
     output_metas()
-    
+    puts "#{SPLIT_LINE}Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
+
     return if @config[:meta_only]
     start_download()
     sleep(1) while @agent_head.working? || @agent_tail.working?
@@ -577,6 +674,13 @@ module EHentaiDownloader
     mid = total_pages / 2
     @agent_head.end_page = @agent_tail.start_page = mid
     @agent_tail.end_page = total_pages
+    print("Setting start page manually? (Y/N): ")
+    request_continue(nil, yes: Proc.new{
+      _in = input("Head Worker (#{0}~#{@agent_head.end_page}): ").to_i
+      @agent_head.start_page = [@agent_head.end_page, _in].min
+      _in = input("Tail Worker (#{mid}~#{@agent_tail.end_page}): ").to_i
+      @agent_tail.start_page = [@agent_tail.end_page, _in].min
+    })
     puts "Head: page#{@agent_head.start_page}~page#{mid}; Tail: page#{mid}~page#{total_pages}"
     @worker = Thread.new{@agent_tail.start_scan()}
     @agent_head.start_scan()
@@ -585,6 +689,7 @@ module EHentaiDownloader
 
   def output_oom_metas()
     puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
+    puts "Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
     cnt = 0
     cnt+= 1 while File.exist?("_meta_tmp_#{cnt}.json")
     File.open("_meta_tmp_#{cnt}.json", 'w') do |file|
@@ -606,7 +711,8 @@ module EHentaiDownloader
   def start_download
     _len = $download_targets.size
     puts("#{SPLIT_LINE}Start downloading total of #{_len} galleries")
-    $download_targets.each do |info|
+    tmp_dw_targets = $download_targets.dup
+    tmp_dw_targets.each do |info|
       prev_failed = $failed_images.size
       _start_download(info)
       puts "#{SPLIT_LINE}Download completed with #{$failed_images.size - prev_failed} failed\n"
@@ -616,7 +722,21 @@ module EHentaiDownloader
   def _start_download(info)
     download_gallery(info)
     sleep(1) while @agent_head.working? || @agent_tail.working?
-    dump_cur_meta()
+    if current_gallery_completed?
+      puts "OK"
+      $download_targets.delete({'gid' => @cur_gid, 'token' => @cur_token})
+    else
+      dump_download_worker_progress()
+    end
+    $worker_cur_url = ['', '']
+  end
+
+  def dump_download_worker_progress
+    return if $worker_cur_url.inject(''){|r,s|r + s}.strip.length == 0
+    eval_action("Dumping worker progress data...") do
+      puts "\n#{$worker_cur_url}"
+      File.open("#{@cur_folder}/_progress.dat", 'wb'){|f| Marshal.dump($worker_cur_url, f)}
+    end
   end
 
   def on_gallery_failed
@@ -632,9 +752,15 @@ module EHentaiDownloader
   def download_gallery(info)
     @flag_failed = false
     @cur_meta    = {}
-    @cur_folder  = DownloadFolder.dup
     @cur_gid, @cur_token = info['gid'], info['token']
-    build_gallery_folder()
+    @cur_meta    = request_gallery_meta([[@cur_gid, @cur_token]]).first
+    @cur_meta['filecount'] = @cur_meta['filecount'].tr(',','').to_i
+    @cur_folder  = build_gallery_folder()
+    dump_cur_meta()
+    unless gallery_download_needed?
+      puts "#{@cur_folder} has already downloaded all files, skip"
+      return
+    end
     @parnet_url = "#{BaseURL}#{@cur_gid}/#{@cur_token}?nw=session"
     @current_doc = @agent_head.fetch(@parnet_url)
     if @current_doc.search(".gpc").text.match(TotalImg_regex)
@@ -651,20 +777,30 @@ module EHentaiDownloader
     @agent_tail.start_page = @total_cnt
     @agent_head.end_page   = mid
     @agent_tail.end_page   = mid + 1
-    Thread.new{@agent_tail.start_download(last_page, @cur_gid, @cur_token)} if @total_cnt > 1
+    $worker_cur_url = ['', '']
+    @worker = Thread.new{@agent_tail.start_download(last_page, @cur_gid, @cur_token)} if @total_cnt > 1
     @agent_head.start_download(first_page, @cur_gid, @cur_token)
     sleep(1)
+    if @agent_head.cur_page == @agent_head.end_page && @agent_tail.cur_page == @agent_tail.end_page
+      $worker_cur_url = ['', '']
+      @agent_head.clear_progress()
+    end
   end
 
   def get_folder_name
-    folder_name = (@config[:english_title] ? @cur_meta['title'] : @cur_meta['title_jpn']).tr('\\/:*?\"><|','')
+    if !@config[:english_title] && @cur_meta['title_jpn'].strip.length > 3
+      folder_name = @cur_meta['title_jpn']
+    else
+      folder_name = @cur_meta['title']
+    end
+    folder_name.tr!('\\/:*?\"><|','')
     return "#{DownloadFolder}#{folder_name}/"
   end
 
   def build_gallery_folder()
-    @cur_meta = request_gallery_meta([[@cur_gid, @cur_token]]).first
     @cur_folder = get_folder_name()
     Dir.mkdir(@cur_folder) unless File.exist?(@cur_folder)
+    return @cur_folder
   end
 
   def dump_cur_meta
@@ -673,6 +809,17 @@ module EHentaiDownloader
       return
     end
     File.open("#{@cur_folder}/_meta.json", 'w'){|f| f.puts(JSON.pretty_generate(@cur_meta))}
+  end
+
+  def current_gallery_completed?
+    file_cnt = Dir.entries("#{@cur_folder}").select{|f| f.end_with?('.jpg')}.size
+    puts "#{SPLIT_LINE}`#{@cur_folder}` has #{file_cnt}/#{@cur_meta['filecount']} files downloaded."
+    return file_cnt == @cur_meta['filecount']
+  end
+
+  def gallery_download_needed?
+    return false if current_gallery_completed?
+    return true
   end
 
   def load_failed_info
@@ -741,34 +888,121 @@ module EHentaiDownloader
     if mid >= 1
       Thread.new{@agent_tail.redownload_images(tmp_failed[mid..._len])}
     end
-    @agent_head.redownload_images(tmp_failed[0...max(1, mid)])
+    @agent_head.redownload_images(tmp_failed[0...[1, mid].max])
     sleep(1) while @agent_head.working? || @agent_tail.working?
+    process_failed_downloads()
+  end
+
+  def resume_download(dat)
+    puts "Resume download..."
+    $download_targets = dat[:targets]
+    start_download()
     process_failed_downloads()
   end
 end
 
-begin
-  EHentaiDownloader.initialize
-  EHentaiDownloader.start_scan
-rescue SystemExit, Interrupt
-  if EHentaiDownloader.new_json.size > 0
-    Thread.kill(EHentaiDownloader.worker)
-    puts "#{SPLIT_LINE}An attempt to abort is detected but meta is still collecting,"
-    print "do you want to dump them to a tmp file? (Y/N)"
-    request_continue(nil, no: method(:exit_res))
-    EHentaiDownloader.output_oom_metas()
+$running = true
+Dir.mkdir("tmp/") unless File.exist?("tmp/")
+
+while $running
+  begin
+    puts SPLIT_LINE
+    puts "Select functions:"
+    puts "[0] Exit"
+    puts "[1] Download from `conig.txt`"
+    puts "[2] Retry failed downloads"
+    puts "[3] Resume a download"
+    _in = ''
+    until [0, 1, 2, 3].include?(_in)
+      print("#{SPLIT_LINE}>> ")
+      _in = STDIN.getch.to_i rescue nil
+    end
+    puts _in, SPLIT_LINE
+    EHentaiDownloader.initialize
+    case _in
+    when 0
+      puts("Bye!")
+      exit()
+    when 1
+      EHentaiDownloader.start_scan
+    when 2
+      EHentaiDownloader.load_failed_info()
+      if $failed_galleries.size == 0 && $failed_images.size == 0
+        puts("No failed downloads found")
+        next
+      end
+      EHentaiDownloader.process_failed_downloads()
+    when 3
+      files = Dir.glob("tmp/*.dat")
+      _len = files.size
+      puts "#{_len} files found"
+      next if _len == 0
+      download_data = []
+      files.each{|f| File.open(f, 'rb'){|_f| download_data << (Marshal.load(_f) rescue nil)}}
+      puts "#{_len - download_data.size} files failed to load"
+      download_data.compact!
+      _len = download_data.size
+      _selected = -1
+      cur_page = 0
+      top_index, bot_index = 0, [_len, 10].min
+      while _selected == -1
+        top_index = 10 * cur_page
+        bot_index = [10 * (cur_page + 1), _len].min
+        puts "#{SPLIT_LINE}List #{top_index+1}~#{bot_index} of #{_len} results\n#{SPLIT_LINE.chomp}"
+        cnt = 0
+        accepted_input = ['Q']
+        download_data[top_index...bot_index].each do |dat|
+          puts "[#{cnt}] #{dat[:filename]} (filter = #{dat[:filter]}"
+          accepted_input << cnt.to_s
+          cnt += 1
+        end
+        accepted_input << 'A' if cur_page > 0
+        accepted_input << 'D' if bot_index < _len
+        puts "#{SPLIT_LINE}#{'Q: quit'}#{' A: prev page' if cur_page > 0}#{' D: next page' if bot_index < _len}"
+        print ">> "
+        _in = ''
+        _in = STDIN.getch.upcase until accepted_input.include?(_in)
+        puts _in
+        case _in
+        when 'A'; cur_page -= 1;
+        when 'D'; cur_page += 1;
+        when 'Q'; exit();
+        when /\d+/; _selected = _in.to_i + cur_page * 10;
+        end
+      end # while not selected
+      EHentaiDownloader.resume_download(download_data[_selected])
+    end
+  rescue SystemExit, Interrupt
+    Thread.kill_all
+    if (EHentaiDownloader.new_json || []).size > 0
+      Thread.kill(EHentaiDownloader.worker)
+      puts "#{SPLIT_LINE}An attempt to abort is detected but meta is still collecting,"
+      print "do you want to dump them to a tmp file? (Y/N)"
+      request_continue(nil, yes: Proc.new{EHentaiDownloader.output_oom_metas()})
+    elsif $worker_cur_url.any?{|ss| ss.to_s.length > 10}
+      Thread.kill(EHentaiDownloader.worker)
+      puts "#{SPLIT_LINE}An attempt to abort is detected but gallery is still downloading,"
+      print "do you want to resume the download later? (Y/N)"
+      request_continue(nil, yes: Proc.new{
+        EHentaiDownloader.dump_download_worker_progress()
+        _filename = "tmp/dw_#{EHentaiDownloader.get_config_hash()}.dat"
+        save_proc = Proc.new{
+          File.open(_filename, 'wb') do |file|
+            Marshal.dump({
+              :filter => EHentaiDownloader.search_options(:filter), 
+              :targets => $download_targets, 
+              :filename => _filename
+            }, file)
+          end
+        }
+        if File.exist?(_filename)
+          print("#{_filename} already exists, overwrite? (Y/N): ")
+          request_continue(nil, yes: save_proc)
+        else
+          save_proc.call
+        end
+      });
+    end
+    exit_exh()
   end
 end
-
-# File.open("tmp.txt", 'w') do |file|
-#   file.puts JSON.pretty_generate()
-# end
-# resp = %{{"gmetadata":[{"gid":618395,"token":"0439fa3666","archiver_key":"434532--ab734919da6eed988d994ad9efe7b3b72a0d4832","title":"(Kouroumu 8) [Handful\u2606Happiness! (Fuyuki Nanahara)] TOUHOU GUNMANIA A2 (Touhou Project)","title_jpn":"(\u7d05\u697c\u59228) [Handful\u2606Happiness! (\u4e03\u539f\u51ac\u96ea)] TOUHOU GUNMANIA A2 (\u6771\u65b9Project)","category":"Non-H","thumb":"https:\/\/ehgt.org\/14\/63\/1463dfbc16847c9ebef92c46a90e21ca881b2a12-1729712-4271-6032-jpg_l.jpg","uploader":"avexotsukaai","posted":"1376143500","filecount":"20","filesize":51210504,"expunged":false,"rating":"4.52","torrentcount":"0","tags":["parody:touhou project","character:hong meiling","character:marisa kirisame","character:reimu hakurei","character:sanae kochiya","character:youmu konpaku","group:handful happiness","artist:nanahara fuyuki","artbook","full color"]}]}}
-# metas = JSON.load(resp)['gmetadata']
-# metas.each do |mdat|
-#   mdat.each do |k, v|
-#     puts "#{k}: #{v}"
-#   end
-# end
-# puts EHentaiDownloader.config
-# puts EHentaiDownloader.get_page_url
