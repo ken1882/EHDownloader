@@ -3,3 +3,5 @@ test*
 Downloads/*
 tmp*
 cookie.json
+Release*
+cacert.pem

@@ -3,7 +3,7 @@
 
     # 關鍵字搜尋
     :filter => %{
-      female:dragon$
+      male:dragon$ language:chinese
     },
 
     # 類別 (1:搜尋 0:不搜尋, 以下的0/1的功能除非特別註明否則皆同)
@@ -47,11 +47,14 @@
   :english_title          => 0,
 
   # 每傳輸N次休息一次 (預設N=2)
-  :fetch_loose_threshold  => 2,
+  :fetch_loose_threshold  => 0,
 
   # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
   :fetch_sleep_time       => 10,
 
   # 額外的隨機休息秒數增加(0~N秒, 預設3)
   :fetch_sleep_rrange     => 3,
+
+  # 手動輸入爬蟲的搜尋結果開始頁數
+  :set_start_page => 0,
 }
