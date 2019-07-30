@@ -51,7 +51,7 @@ def start
       puts "[2] Retry failed downloads"
       puts "[3] Resume a download"
       _in = ''
-      until [0, 1, 2, 3].include?(_in)
+      until [0, 1, 2, 3, 4].include?(_in)
         print("#{SPLIT_LINE}>> ")
         _in = STDIN.getch.to_i rescue nil
       end
@@ -62,8 +62,14 @@ def start
       when 1; EHentaiDownloader.start_scan();
       when 2; process_failed_downloads();
       when 3; process_download_resume();
+      when 4; process_input_download();
       end
-    rescue SystemExit, Interrupt
+    rescue SystemExit, Interrupt, Exception => err
+      unless err.is_a?(SystemExit) || err.is_a?(Interrupt)
+        puts "#{SPLIT_LINE}An unhandled error occurs! Please submit to author in order to resolve this issue"
+        puts report_exception(err)
+        puts SPLIT_LINE
+      end
       Thread.kill_all()
       eval_action("Terminating singal received, dumping failed download info...") do
         EHentaiDownloader.dump_failed_info()
@@ -159,6 +165,7 @@ end
 
 def load_resume_files
   files = Dir.glob("tmp/*.dat")
+  files.sort_by!{|f| -File.mtime(f).to_f}
   _len = files.size
   puts "#{_len} files found"
   return [] if _len == 0
@@ -166,6 +173,14 @@ def load_resume_files
   files.each{|f| File.open(f, 'rb'){|_f| re << (Marshal.load(_f) rescue nil)}}
   puts "#{_len - re.size} files failed to load"
   return re.compact
+end
+
+def process_input_download
+  filename = "targets.txt"
+  unless File.exist?(filename)
+    puts "#{filename} not found!"
+  end
+  # todo: get url from input file
 end
 
 start()

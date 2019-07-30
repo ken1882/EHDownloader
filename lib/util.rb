@@ -25,6 +25,16 @@ def request_continue(msg='', **kwargs)
   end
 end
 
+def report_exception(error)
+  backtrace = error.backtrace
+  error_line = backtrace.first
+  backtrace[0] = ''
+  err_class = " (#{error.class})"
+  back_trace_txt = backtrace.join("\n\tfrom ")
+  error_txt = sprintf("%s %s %s %s %s %s",error_line, ": ", error.message, err_class, back_trace_txt, "\n" )
+  return error_txt
+end
+
 alias exit_exh exit
 def exit(*args)
   puts("Press any key to exit...")

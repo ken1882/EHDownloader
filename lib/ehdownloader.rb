@@ -306,8 +306,17 @@ module EHentaiDownloader
   end
 
   def _start_download(info)
-    download_gallery(info)
-    sleep(1) while @agent_head.working? || @agent_tail.working?
+    begin
+      download_gallery(info)
+    rescue SystemExit, Interrupt => err
+      sleep(3600) until Thread.current == ::MainThread
+      raise err
+    rescue Exception => err
+      warning("Unhandled excpetion while downloading gallery")
+      $failed_galleries << FailedGallery.new(@cur_gid, @cur_token, nil)
+      @flag_failed = true
+    end
+    sleep(1) while !@flag_failed && @agent_head.working? || @agent_tail.working?
     if current_gallery_completed?
       puts "OK"
       $download_targets.delete({'gid' => @cur_gid, 'token' => @cur_token})
@@ -359,6 +368,7 @@ module EHentaiDownloader
     @current_doc = @agent_head.fetch(first_page, fallback: method(:on_gallery_failed))
     last_page = @current_doc.links_with(href: Regexp.new("#{info['gid']}-#{@total_cnt}")).first.uri
     mid = (@total_cnt / 2).to_i
+    # todo: change image scan method to quickly check existed images
     @agent_head.start_page = 1
     @agent_tail.start_page = @total_cnt
     @agent_head.end_page   = mid
