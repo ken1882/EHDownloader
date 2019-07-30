@@ -58,14 +58,14 @@ def start
       puts _in, SPLIT_LINE
       EHentaiDownloader.initialize
       case _in
-      when 0; puts("Bye!"); exit();
+      when 0; puts("Bye!"); exit_exh();
       when 1; EHentaiDownloader.start_scan();
       when 2; process_failed_downloads();
       when 3; process_download_resume();
       end
     rescue SystemExit, Interrupt
       Thread.kill_all()
-      eval_action("Terminating singal received, dumping failed download info") do
+      eval_action("Terminating singal received, dumping failed download info...") do
         EHentaiDownloader.dump_failed_info()
       end
       if meta_collecting?
@@ -77,7 +77,7 @@ def start
         print "do you want to resume the download later? (Y/N)"
         rescue_downloads()
       end
-      exit_exh()
+      exit()
     end
   end
 end
@@ -96,7 +96,7 @@ def rescue_downloads
     _filename = "tmp/dw_#{EHentaiDownloader.get_config_hash()}.dat"
     if File.exist?(_filename)
       print("#{_filename} already exists, overwrite? (Y/N): ")
-      request_continue(nil, yes: method(:dump_download_status))
+      request_continue(nil, yes: Proc.new{dump_download_status(_filename)})
     else
       dump_download_status(_filename)
     end

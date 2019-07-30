@@ -5,3 +5,4 @@ tmp*
 cookie.json
 Release*
 cacert.pem
+*.dat

@@ -183,6 +183,7 @@ module EHentaiDownloader
     File.open('cookie.json', 'r') do |file|
       @cookies = JSON.parse(file.read)
     end
+    puts @cookies.size
     @cookies.each do |ck|
       @agent_head.cookie_jar << Mechanize::Cookie.new(ck)
       @agent_tail.cookie_jar << Mechanize::Cookie.new(ck)
@@ -436,11 +437,11 @@ module EHentaiDownloader
 
   def dump_failed_info
     load_failed_info()
-    File.open("failedG.dat") do |file|
+    File.open("failedG.dat", 'wb') do |file|
       info = Marshal.dump($failed_galleries, file)
     end
-    File.open("failedI.dat") do |file|
-      info = Marshal.load($failed_images, file)
+    File.open("failedI.dat", 'wb') do |file|
+      info = Marshal.dump($failed_images, file)
     end
   end
 
