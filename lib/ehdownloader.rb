@@ -351,8 +351,9 @@ module EHentaiDownloader
   end
 
   def dump_download_worker_progress
-    return if $worker_cur_url.inject(''){|r,s|r + s}.strip.length == 0
+    return if $worker_cur_url.inject(''){|r,s|r + s.to_s}.strip.length == 0
     eval_action("Dumping worker progress data...") do
+      $worker_cur_url.collect!{|uri| uri.to_s}
       puts "\n#{$worker_cur_url}"
       File.open("#{@cur_folder}/_progress.dat", 'wb'){|f| Marshal.dump($worker_cur_url, f)}
     end

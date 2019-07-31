@@ -53,10 +53,10 @@ def start
       messages = [
         "Exit",
         "#{dw_or_mt} from `conig.txt`",
+        "Download from file",
         "Retry failed downloads",
         "Resume a download",
         "Resume a meta collecting",
-        "#{dw_or_mt} from file",
       ]
       list = messages.collect{|m| UI_Selector::Item.new(m)}
       EHentaiDownloader.initialize
@@ -64,10 +64,10 @@ def start
       case _in
       when 0; puts("Bye!"); exit_exh();
       when 1; EHentaiDownloader.start_scan();
-      when 2; process_failed_downloads();
-      when 3; process_download_resume();
-      when 4; process_meta_resume();
-      when 5; process_input_download();
+      when 2; process_input_download();
+      when 3; process_failed_downloads();
+      when 4; process_download_resume();
+      when 5; process_meta_resume();
       end
     rescue SystemExit, Interrupt, Exception => err
       on_unhandled_error(err) unless err.is_a?(SystemExit) || err.is_a?(Interrupt)

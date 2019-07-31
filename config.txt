@@ -3,7 +3,7 @@
 
     # 關鍵字搜尋
     :filter => %{
-      
+      female:dragon$
     },
 
     # 類別 (1:搜尋 0:不搜尋, 以下的0/1的功能除非特別註明否則皆同)
@@ -42,7 +42,7 @@
   :download_original      => 0,
 
   # 僅蒐尋本本meta資料, 不載圖
-  :meta_only              => 10,
+  :meta_only              => 0,
 
   # 下載圖片時的資料夾名稱使用全英文
   :english_title          => 0,
