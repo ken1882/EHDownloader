@@ -1,5 +1,5 @@
 module EHentaiDownloader
-  mattr_reader :agent_head, :agent_tail, :config, :cur_folder
+  mattr_reader :agent_head, :agent_tail, :config, :cur_folder, :total_num
   mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
 
   GalleryURLRegex = /https:\/\/e-hentai.org\/g\/(\d+)\/(.+)/i
@@ -50,6 +50,7 @@ module EHentaiDownloader
         :s_deleted    => true,
         :min_star     => 0,
         :page_between => [1, 9999],
+        :disable_default_filter => true,
       },
 
       :english_title          => false,
@@ -60,23 +61,32 @@ module EHentaiDownloader
       :fetch_sleep_rrange     => 3,
       :set_start_page         => false,
     }
-    eval_action("Loading config file..."){load_config()}
-    eval_action("Loading cookie..."){load_cookie()}
+    load_config_files()
     @agent_head.search_param = "#{get_search_param()}#{get_advsearch_param()}"
     @agent_tail.search_param = "#{get_search_param()}#{get_advsearch_param()}"
-    load_existed_json()
+    load_existed_meta()
     @existed_json ||= []
     @agent_head.existed_json = @existed_json
     @agent_tail.existed_json = @existed_json
   end
 
-  def load_existed_json
+  def load_config_files
+    eval_action("Loading config file..."){load_config()}
+    eval_action("Loading cookie..."){load_cookie()}
+  end
+
+  def load_existed_meta
     return unless File.exist?(ResultJsonFilename)
     eval_action("Loading exited meta infos...") do
       File.open(ResultJsonFilename, 'r') do |file|
         @existed_json = JSON.load(file)
       end
     end
+  end
+
+  def merge_meta(metas)
+    @existed_json += metas
+    @existed_json.uniq!{|obj| obj['gid']}
   end
 
   def search_options(sym=nil)
@@ -183,7 +193,7 @@ module EHentaiDownloader
     File.open('cookie.json', 'r') do |file|
       @cookies = JSON.parse(file.read)
     end
-    puts @cookies.size
+    puts "#{@cookies.size} cookies loaded"
     @cookies.each do |ck|
       @agent_head.cookie_jar << Mechanize::Cookie.new(ck)
       @agent_tail.cookie_jar << Mechanize::Cookie.new(ck)
@@ -204,6 +214,7 @@ module EHentaiDownloader
     re += '&f_sh=on'    if search_options(:s_deleted)
     re += "&f_sr=on&f_srdd=#{search_options(:min_star)}" if search_options(:min_star) > 1
     re += "&f_sp=on&f_spf=#{search_options(:page_between).first}&f_spt=#{search_options(:page_between).last}"
+    re += "&f_sfl=on&f_sfu=on&f_sft=on" if search_options(:disable_default_filter)
     re
   end
 
@@ -223,22 +234,14 @@ module EHentaiDownloader
   end
 
   def start_scan
+    init_collect_members()
     _url = get_page_url()
-    $download_targets = []
-    $failed_galleries = []
-    $failed_images    = []
-    @new_json = []
-    @agent_head.new_json = @agent_tail.new_json = @new_json
 
     eval_action("") do
       @current_doc = @agent_head.fetch(_url)
     end
     get_total_number()
-    _continue = true
-    request_continue("#{SPLIT_LINE}Searched with #{@total_num} results", no: Proc.new{_continue = false})
-    return unless _continue
-    @prev_size = @existed_json.size
-    $meta_start_time = Time.now
+    return unless prepare_collect_metas()
     collect_metas()
     sleep(1) while @agent_head.working? || @agent_tail.working?
     output_metas()
@@ -251,25 +254,46 @@ module EHentaiDownloader
     process_failed_downloads()
   end
 
-  def collect_metas
+  def prepare_collect_metas
+    _continue = true
+    request_continue("#{SPLIT_LINE}Searched with #{@total_num} results\nContinue?", no: Proc.new{_continue = false})
+    return false unless _continue
+    $meta_start_time = Time.now
+    @worker = Thread.new{@agent_tail.start_scan(1)}
+    @agent_head.start_scan(0)
+    return true
+  end
+
+  def init_collect_members
+    $download_targets = []
+    $failed_galleries = []
+    $failed_images    = []
+    @new_json = []
+    @agent_head.new_json = @agent_tail.new_json = @new_json
     $existed_gal_cnt = 0
+  end
+
+  def collect_metas
+    @agent_head.start_page = nil
     total_pages = (@total_num / 25.0).ceil
     puts "Total pages: #{total_pages}"
-    mid = total_pages / 2
-    @agent_head.end_page = @agent_tail.start_page = mid
-    @agent_tail.end_page = total_pages
     if @config[:set_start_page]
-      print("Setting start page manually? (Y/N): ")
-      request_continue(nil, yes: Proc.new{
-        _in = input("Head Worker (#{0}~#{@agent_head.end_page}): ").to_i
-        @agent_head.start_page = [@agent_head.end_page, _in].min
-        _in = input("Tail Worker (#{mid}~#{@agent_tail.end_page}): ").to_i
-        @agent_tail.start_page = [@agent_tail.end_page, _in].min
+      request_continue("Setting scan range manually?", yes: Proc.new{
+        _in_st = (input("Start from (#{0}~#{total_pages}): ").to_i rescue nil) until _in_st.is_a?(Numeric)
+        _in_ed = (input("End at (#{mid}~#{@agent_tail.end_page}): ").to_i  rescue nil) until _in_ed.is_a?(Numeric)
       })
     end
-    puts "Head: page#{@agent_head.start_page}~page#{mid}; Tail: page#{mid}~page#{total_pages}"
-    @worker = Thread.new{@agent_tail.start_scan()}
-    @agent_head.start_scan()
+
+    if @agent_head.start_page.nil?
+      _in_st, _in_ed = 0, total_pages
+    end
+    mid = total_pages / 2
+    @agent_head.start_page = _in_st
+    @agent_head.end_page = @agent_tail.start_page = mid
+    @agent_tail.end_page = _in_ed
+    puts "Head: page#{@agent_head.start_page}~page#{mid}; Tail: page#{mid}~page#{_in_ed}"
+    @worker = Thread.new{@agent_tail.start_scan(1)}
+    @agent_head.start_scan(0)
     sleep(1)
   end
 
@@ -374,8 +398,8 @@ module EHentaiDownloader
     @agent_head.end_page   = mid
     @agent_tail.end_page   = mid + 1
     $worker_cur_url = ['', '']
-    @worker = Thread.new{@agent_tail.start_download(last_page, @cur_gid, @cur_token)} if @total_cnt > 1
-    @agent_head.start_download(first_page, @cur_gid, @cur_token)
+    @worker = Thread.new{@agent_tail.start_download(1, last_page, @cur_gid, @cur_token)} if @total_cnt > 1
+    @agent_head.start_download(0, first_page, @cur_gid, @cur_token)
     sleep(1)
     if @agent_head.cur_page == @agent_head.end_page && @agent_tail.cur_page == @agent_tail.end_page
       $worker_cur_url = ['', '']
@@ -459,8 +483,7 @@ module EHentaiDownloader
     return if $failed_galleries.size == 0 && $failed_images.size == 0
     puts("Failed gallery: #{$failed_galleries.size}")
     puts("Failed images: #{$failed_images.size}")
-    print("#{SPLIT_LINE}Retry these downloads? (Y/N): ")
-    request_continue(nil, no: method(:process_save_failed))
+    request_continue("#{SPLIT_LINE}Retry these downloads?", no: method(:process_save_failed))
     retry_failed_downloads()
   end
 
@@ -494,5 +517,42 @@ module EHentaiDownloader
     $download_targets = dat[:targets]
     start_download()
     process_failed_downloads()
+  end
+
+  def get_meta_progress
+    agents = [@agent_head, @agent_tail]
+    re = []
+    $worker_cur_url.collect!{|s| s == '' ? nil : s}
+    agents.each do |agent|
+      url = ($worker_cur_url[agent.worker_id] || agent.current_doc.uri.to_s rescue nil)
+      re << {
+        :sparam   => agent.search_param,
+        :start    => agent.start_page,
+        :end      => agent.end_page,
+        :cur      => agent.cur_page
+      }
+    end
+    return re
+  end
+
+  def resume_collect(dat)
+    eval_action("Resume collecting...\n") do 
+      agents = [@agent_head, @agent_tail]
+      agents.each_with_index do |a, i|
+        a.search_param = dat[:progress][i][:sparam]
+        a.start_page   = dat[:progress][i][:start]
+        a.end_page     = dat[:progress][i][:end]
+        a.cur_page     = dat[:progress][i][:cur]
+        puts "Loaded with searching `#{a.search_param}`"
+        puts "#{a.start_page} ~ #{a.end_page} (at #{a.cur_page })"
+      end
+    end
+    init_collect_members()
+    @total_num = dat[:total_num] || 0
+    return unless prepare_collect_metas()
+    sleep(1)
+    sleep(1) while @agent_head.working? || @agent_tail.working?
+    output_metas()
+    puts "#{SPLIT_LINE}Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
   end
 end

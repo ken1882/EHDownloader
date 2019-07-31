@@ -1,5 +1,5 @@
 class Agent < Mechanize
-  attr_reader :current_doc, :existed_json, :flag_working, :new_json
+  attr_reader :current_doc, :existed_json, :flag_working, :new_json, :worker_id
   attr_accessor :failed, :search_param
   attr_accessor :start_page, :end_page, :cur_page
 
@@ -63,7 +63,8 @@ class Agent < Mechanize
     "https://e-hentai.org/?page=#{page_id}#{@search_param}"
   end
 
-  def start_scan
+  def start_scan(_id)
+    @worker_id = _id
     @flag_working = true
     @cur_page = @start_page
     
@@ -76,6 +77,7 @@ class Agent < Mechanize
 
   def next_page
     @current_doc = fetch(get_page_url(@cur_page))
+    $worker_cur_url[@worker_id] = @current_doc.uri rescue ''
     @cur_page += 1
   end
 
@@ -128,7 +130,8 @@ class Agent < Mechanize
     ::File.delete("#{@cur_folder}/_progress.dat")
   end
 
-  def start_download(init_url, gid, token)
+  def start_download(_wid, init_url, gid, token)
+    @worker_id = _wid
     @flag_working = true
     @cur_folder = EHentaiDownloader.cur_folder
     @cur_gid, @cur_token = gid, token
@@ -141,16 +144,11 @@ class Agent < Mechanize
     loop do
       break if @current_doc.nil?
       @cur_parent_url = @current_doc.uri
+      $worker_cur_url[@worker_id] = @cur_parent_url.to_s rescue ''
       dowload_current_image()
       wait4download()
       break if @end_page == @cur_page
-      if @end_page > @start_page
-        @cur_page += 1
-        $worker_cur_url.first = @cur_parent_url.to_s
-      elsif @end_page < @start_page
-        @cur_page -= 1
-        $worker_cur_url.last  = @cur_parent_url.to_s
-      end
+      @cur_page += (@end_page > @start_page ? 1 : -1)
       next_link = get_next_link()
       @current_doc = fetch(next_link, fallback: Proc.new{on_fetch_failed(next_link)})
     end

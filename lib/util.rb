@@ -13,8 +13,8 @@ def warning(*args)
 end
 
 # Continue program or exit
-def request_continue(msg='', **kwargs)
-  print("#{msg}\nContinue?(Y/N): ") unless msg.nil?
+def request_continue(msg=nil, **kwargs)
+  print("#{msg} (Y/N): ") unless msg.nil?
   _ch = ''
   _ch = STDIN.getch.upcase until _ch == 'Y' || _ch == 'N'
   puts _ch
@@ -63,7 +63,7 @@ def eval_action(load_msg='', &block)
     yield block
   rescue Exception => err
     puts("An error occurred!")
-    puts("#{err}\n#{SPLIT_LINE}")
+    puts("#{report_exception(err)}\n#{SPLIT_LINE}")
     puts("This action will be skipped")
   end
   puts("succeed")
@@ -107,4 +107,158 @@ def to_readable_time_distance(delta_sec)
   hours   = minutes / 60; minutes %= 60;
   days    = hours / 24; hours %= 24;
   return sprintf("#{days} days, %02d:%02d:%.3f", hours, minutes, seconds)
+end
+
+def meta_collecting?
+  return EHentaiDownloader.config[:meta_only] && (EHentaiDownloader.new_json || []).size > 0
+end
+
+def downloading?
+  return $worker_cur_url.any?{|ss| ss.to_s.length > 10}
+end
+
+def rescue_metas
+  request_continue(nil, yes: Proc.new{
+    EHentaiDownloader.output_oom_metas()
+    _filename = "tmp/mt_#{EHentaiDownloader.get_config_hash()}.dat"
+    if File.exist?(_filename)
+      request_continue("#{_filename} already exists, overwrite?", yes: Proc.new{dump_meta_status(_filename)})
+    else
+      dump_meta_status(_filename)
+    end
+  })
+end
+
+def rescue_downloads
+  request_continue(nil, yes: Proc.new{
+    EHentaiDownloader.dump_download_worker_progress()
+    _filename = "tmp/dw_#{EHentaiDownloader.get_config_hash()}.dat"
+    if File.exist?(_filename)
+      request_continue("#{_filename} already exists, overwrite?", yes: Proc.new{dump_download_status(_filename)})
+    else
+      dump_download_status(_filename)
+    end
+  });
+end
+
+def dump_meta_status(_filename)
+  File.open(_filename, 'wb') do |file|
+    Marshal.dump({
+      :total_num => EHentaiDownloader.total_num,
+      :filter   => EHentaiDownloader.search_options(:filter), 
+      :progress => EHentaiDownloader.get_meta_progress(),
+      :filename => _filename
+    }, file)
+  end
+end
+
+def dump_download_status(_filename)
+  File.open(_filename, 'wb') do |file|
+    Marshal.dump({
+      :filter => EHentaiDownloader.search_options(:filter), 
+      :targets => $download_targets, 
+      :filename => _filename
+    }, file)
+  end
+end
+
+def process_failed_downloads
+  EHentaiDownloader.load_failed_info()
+  if $failed_galleries.size == 0 && $failed_images.size == 0
+    puts("No failed downloads found")
+    return
+  end
+  EHentaiDownloader.process_failed_downloads()
+end
+
+def process_download_resume()
+  download_data = load_download_resume_files()
+  _len = download_data.size
+  return if _len == 0
+  list = download_data.collect do |dat|
+    UI_Selector::Item.new("#{dat[:filename]} (filter = #{dat[:filter]}")
+  end
+  _selected = UI_Selector.start(list: list, head_msg: "Select a file...", quit: Proc.new{})
+  EHentaiDownloader.resume_download(download_data[_selected]) if _selected
+end
+
+def load_download_resume_files
+  files = Dir.glob("tmp/dw*.dat")
+  files.sort_by!{|f| -File.mtime(f).to_f}
+  _len = files.size
+  puts "#{_len} files found"
+  return [] if _len == 0
+  re = []
+  files.each{|f| File.open(f, 'rb'){|_f| re << (Marshal.load(_f) rescue nil)}}
+  puts "#{_len - re.size} files failed to load"
+  return re.compact
+end
+
+def process_meta_resume
+  meta_data = load_meta_resume_files()
+  _len = meta_data.size
+  return if _len == 0
+  list = meta_data.collect do |dat|
+    UI_Selector::Item.new("#{dat[:filename][0..15]}...dat (filter = #{dat[:filter]}")
+  end
+  _selected = UI_Selector.start(list: list, head_msg: "Select a file...", quit: Proc.new{})
+  EHentaiDownloader.resume_collect(meta_data[_selected]) if _selected
+end
+
+def load_meta_resume_files
+  files = Dir.glob("tmp/mt*.dat")
+  files.sort_by!{|f| -File.mtime(f).to_f}
+  _len = files.size
+  puts "#{_len} files found"
+  return [] if _len == 0
+  re = []
+  files.each{|f| File.open(f, 'rb'){|_f| re << (Marshal.load(_f) rescue nil)}}
+  puts "#{_len - re.size} files failed to load"
+  return re.compact
+end
+
+def process_input_download
+  filename = "targets.txt"
+  unless File.exist?(filename)
+    puts "#{filename} not found!"
+  end
+  targets = []
+  File.open(filename, 'r') do |file|
+    file.read().split(/[\r\n]+/).each do |line|
+      next unless line.match(/https:\/\/e-hentai.org\/g\/(\d+)\/(.*)/)
+      gid, token = $1.to_i, $2
+      puts("line loaded with gid: #{gid} and token: #{token}")
+      $download_targets << {'gid' => gid, 'token' => token}
+    end
+  end
+  EHentaiDownloader.start_download()
+end
+
+def on_unhandled_error(err)
+  puts "#{SPLIT_LINE}An unhandled error occurs! Please submit to author in order to resolve this issue"
+  puts report_exception(err)
+  puts SPLIT_LINE
+end
+
+def detect_tmp_metas
+  files = Dir.glob("_meta_tmp_*.json")
+  return if files.size == 0
+  puts "#{SPLIT_LINE}Detected #{files.size} of tmp meta files"
+  request_continue("Do you wish to merge them?", yes: Proc.new{
+    EHentaiDownloader.load_existed_meta()
+    new_json = []
+    files.each do |file|
+      begin
+        File.open(file, 'r'){|f| new_json += JSON.load(f)}
+      rescue Exception => err
+        puts "#{err} while loading #{file}, skip"
+      end
+    end
+    puts "#{new_json.size} gallery info loaded from tmp files, merging..."
+    before = EHentaiDownloader.existed_json.size
+    EHentaiDownloader.merge_meta(new_json)
+    after  = EHentaiDownloader.existed_json.size
+    puts "#{after - before} new gallery info loaded"
+    files.each{|f| File.delete(f)}
+  })
 end

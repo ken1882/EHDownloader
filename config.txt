@@ -3,12 +3,12 @@
 
     # 關鍵字搜尋
     :filter => %{
-      female:dragon$
+      
     },
 
     # 類別 (1:搜尋 0:不搜尋, 以下的0/1的功能除非特別註明否則皆同)
     :types => {
-      :misc       => 0,
+      :misc       => 1,
       :doujinshi  => 1,
       :manga      => 1,
       :arist_cg   => 1,
@@ -30,18 +30,19 @@
     :s_deleted    => 1,
 
     # 最低評價星級
-    :min_star     => 3,
+    :min_star     => 0,
 
     # 本本頁數 (預設為1~9999頁)
     :page_between => [1, 9999],
     
+    :disable_default_filter => 1,
   }, # do not remove this
 
   # 下載原圖需要登入的cookie, 若啟用則會因為流量大而容易被ban
   :download_original      => 0,
 
   # 僅蒐尋本本meta資料, 不載圖
-  :meta_only              => 0,
+  :meta_only              => 10,
 
   # 下載圖片時的資料夾名稱使用全英文
   :english_title          => 0,
@@ -50,8 +51,11 @@
   :fetch_loose_threshold  => 2,
 
   # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
-  :fetch_sleep_time       => 1,
+  :fetch_sleep_time       => 10,
 
   # 額外的隨機休息秒數增加(0~N秒, 預設3)
   :fetch_sleep_rrange     => 0,
+
+  # 手動輸入抓取的範圍
+  :set_start_page         => 0,
 }
