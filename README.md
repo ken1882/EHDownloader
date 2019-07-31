@@ -6,12 +6,14 @@ https://github.com/ken1882/EHDownloader/releases
 
 ## 使用方式 | Usage
 
+如需使用Cookie, 推薦使用 [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg)輸出成JSON並到`cookie.json`全部貼上並取代。如果你的Cookie是贊助者cookie，搜尋功能理論上將會找到更多結果<br>
+If you want to use Cookie, recommending using [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg) to export them and paste on `cookie.json`, replacing what it's inside. If you're a sponsor you should be able to search with more results now.<br>
+
 提供2種下載方式:
 - 搜尋下載 (下載所有搜尋到的畫廊)
 - 從檔案下載 (檔案內部含要下載的畫廊網址)
 
-
-There're 2 methods you can download:
+This program provides 2 methods to download:
 - Download from search result (Download all galleries found)
 - DOwnload from file (The file contains the links to the galleries you want to download)
 
