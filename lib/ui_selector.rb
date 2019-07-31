@@ -19,9 +19,9 @@ module UI_Selector
     _len = @list.size
     cur_page = 0
     top_index, bot_index = 0, [_len, 10].min
-    top_index = 10 * cur_page
-    bot_index = [10 * (cur_page + 1), _len].min
     while _selected == -1
+      top_index = 10 * cur_page
+      bot_index = [10 * (cur_page + 1), _len].min
       puts SPLIT_LINE
       puts @head_message
       puts "#{SPLIT_LINE}List #{top_index+1}~#{bot_index} of #{_len}\n#{SPLIT_LINE.chomp}" if @list.size > 10

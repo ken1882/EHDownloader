@@ -514,6 +514,7 @@ module EHentaiDownloader
 
   def resume_download(dat)
     puts "Resume download..."
+    EHentaiDownloader.search_options[:filter] = dat[:filter]
     $download_targets = dat[:targets]
     start_download()
     process_failed_downloads()

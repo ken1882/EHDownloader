@@ -48,7 +48,7 @@
   :english_title          => 0,
 
   # 每傳輸N次休息一次 (預設N=2)
-  :fetch_loose_threshold  => 2,
+  :fetch_loose_threshold  => 0,
 
   # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
   :fetch_sleep_time       => 10,

@@ -222,15 +222,18 @@ def process_input_download
   unless File.exist?(filename)
     puts "#{filename} not found!"
   end
-  targets = []
+  $download_targets ||= []
   File.open(filename, 'r') do |file|
     file.read().split(/[\r\n]+/).each do |line|
       next unless line.match(/https:\/\/e-hentai.org\/g\/(\d+)\/(.*)/)
       gid, token = $1.to_i, $2
+      token.chomp!('/') until token[-1] != '/'
       puts("line loaded with gid: #{gid} and token: #{token}")
       $download_targets << {'gid' => gid, 'token' => token}
     end
   end
+  return puts "Nothing to download!" if $download_targets.size == 0
+  EHentaiDownloader.search_options[:filter] = "(Download from file input)"
   EHentaiDownloader.start_download()
 end
 
