@@ -40,7 +40,7 @@ Just as the search function in the website, if you want to exclude korean:<br>
 類別(category)
 
 		# 類別 (1:搜尋 0:不搜尋, 以下的0/1的功能除非特別註明否則皆同)
-                # 1: search this category, 0: don't (the 1/0 below means same unless noted)
+            # 1: search this category, 0: don't (the 1/0 below means same unless noted)
 		:types => {
 		  :misc       => 1,
 		  :doujinshi  => 1,
@@ -93,31 +93,31 @@ Below are contents of advanced search<br>
 	  }, # do not remove this
 
 	  # 下載原圖需要登入的cookie, 若啟用則會因為流量大而容易被ban
-          # Whether download original file, a working login cookie is required, 
-          # beware that your internet traffic will be tremendously increased and may result a ban
+      # Whether download original file, a working login cookie is required, 
+      # beware that your internet traffic will be tremendously increased and may result a ban
 	  :download_original      => 0,
 
 	  # 僅蒐尋本本meta資料, 不載圖 | search meta only without download gallery
 	  :meta_only              => 0,
 
 	  # 下載圖片時的資料夾名稱使用全英文
-          # Full-English folder title when downloading
+      # Full-English folder title when downloading
 	  :english_title          => 0,
 
 	  # 每傳輸N次休息一次 (預設N=2)
-          # Sleep for a time per N times of connections (Default N=2)
+      # Sleep for a time per N times of connections (Default N=2)
 	  :fetch_loose_threshold  => 2,
 
 	  # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
-          # Sleep duration in seconds (+0~1 sec in runtime)
+      # Sleep duration in seconds (+0~1 sec in runtime)
 	  :fetch_sleep_time       => 10,
 
 	  # 額外的隨機休息秒數增加(0~N秒, 預設3)
-          # Extra randomed sleep duration (0~N)
+      # Extra randomed sleep duration (0~N)
 	  :fetch_sleep_rrange     => 3,
 
 	  # 手動輸入抓取的範圍
-          # Manually enter crawling page range
+      # Manually enter crawling page range
 	  :set_start_page         => 0,
 	}
   
