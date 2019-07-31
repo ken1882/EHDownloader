@@ -458,7 +458,7 @@ module EHentaiDownloader
     if File.exist?("failedI.dat")
       info = []
       begin
-        File.open("failedG.dat", 'rb') do |file|
+        File.open("failedI.dat", 'rb') do |file|
           info = Marshal.load(file)
         end
         $failed_images += info
@@ -466,8 +466,8 @@ module EHentaiDownloader
         warning("An error occurred while loading failed image info!", err)
       end
     end
-    $failed_galleries.uniq!{|obj| obj.page_url}
-    $failed_images.uniq!{|obj| obj.gid}
+    $failed_galleries.uniq!{|obj| obj.gid}
+    $failed_images.uniq!{|obj| obj.page_url}
   end
 
   def dump_failed_info

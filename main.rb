@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 $:.unshift File.dirname($0)
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 SPLIT_LINE = '-'*21 + 10.chr
 
 FailedImage   = Struct.new(:page_url, :id, :folder, :hd)
