@@ -94,7 +94,7 @@ Below are contents of advanced search<br>
 		:disable_default_filter => 1,
 	  }, # do not remove this
 
-	  # 下載原圖需要登入的cookie, 若啟用則會因為流量大而容易被ban
+	  # 是否下載原圖，若啟用則需要可成功登入的cookie, 注意有可能因為流量大而更容易被ban或超過流量上限
       # Whether download original file, a working login cookie is required, 
       # beware that your internet traffic will be tremendously increased and may result a ban
 	  :download_original      => 0,
