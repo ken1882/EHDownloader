@@ -1,9 +1,18 @@
 require 'win32api'
 
 GetAsyncKeyState = Win32API.new('user32', "GetAsyncKeyState", 'i', 'i')
+VK_F5 = 0x74
 
+$key_states = []
+$key_called_cnt = 0
 def key_triggered?(vt)
-  return (GetAsyncKeyState.call(vt) & 0x8000) != 0
+  $key_called_cnt += 1
+  re = (GetAsyncKeyState.call(vt) & 0x8000) != 0
+  $key_states[vt] = true if re
+  if $key_called_cnt > 3
+    $key_states = []
+  end
+  return re || $key_states[vt]
 end
 
 def warning(*args)
@@ -73,7 +82,7 @@ end
 def check_wait_ban(page)
   while page.links.size == 0
     puts "#{SPLIT_LINE}Traffic overloaded! Sleep for 1 hour to wait the ban expires"
-    puts "Press `C` to force continue"
+    puts "Press `F5` to force continue"
     watied = 0
     while watied < 60 * 60
       sleep(0.05)
@@ -84,6 +93,31 @@ def check_wait_ban(page)
         if page.links.size == 0
           puts "Ban still remains! Response Body:"
           puts page.body + 10.chr
+        else
+          puts "Succeed!"
+          break
+        end
+      end
+    end # while waiting
+    page = fetch(page.uri)
+  end
+  return page
+end
+
+def check_wait_limit(page)
+  img_link = page.css("[@id='img']").first.attr('src')
+  while img_link.to_s == "https://ehgt.org/g/509.gif"
+    puts "#{SPLIT_LINE}Your limit of viewing gallery image has reached. Program will pause for 1 hour."
+    puts "Or press `F5` to force continue"
+    watied = 0
+    while watied < 60 * 60
+      sleep(0.05)
+      watied += 0.05
+      if key_triggered?(VK_F5)
+        puts "Trying reconnect..."
+        page = fetch(page.uri)
+        if page.css("[@id='img']").first.attr('src') == "https://ehgt.org/g/509.gif"
+          puts "The limit still has reached the maximum"
         else
           puts "Succeed!"
           break

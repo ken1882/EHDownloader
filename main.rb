@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 $:.unshift File.dirname($0)
 
-VERSION = "0.1.1"
+VERSION = "0.1.3"
 SPLIT_LINE = '-'*21 + 10.chr
 
-FailedImage   = Struct.new(:page_url, :id, :folder, :hd)
+if ARGV.include?("-v") || ARGV.include?("--version")
+  puts VERSION
+  exit()
+end
+
+FailedImage   = Struct.new(:page_url, :id, :folder, :hd, :gid, :gtoken)
 FailedGallery = Struct.new(:gid, :token, :folder)
 MainThread    = Thread.current
 DownloadFolder = "Downloads/"
 ENV['SSL_CERT_FILE'] = "cacert.pem"
-VK_F5 = 0x74
 
 $failed_galleries = []
 $failed_images    = []

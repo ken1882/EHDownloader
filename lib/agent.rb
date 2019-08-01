@@ -4,6 +4,8 @@ class Agent < Mechanize
   attr_accessor :failed, :search_param
   attr_accessor :start_page, :end_page, :cur_page
 
+  ImageFileExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'webp']
+
   def initialize(*args)
     @current_doc = nil
     @flag_working = false
@@ -30,7 +32,7 @@ class Agent < Mechanize
     return if @collected_images.equal?(_out)
     @collected_images = _out
   end
-
+  
   def fetch(*args, **kwargs, &block)
     depth = 0
     _ok   = false
@@ -57,7 +59,7 @@ class Agent < Mechanize
         warning("\nReceived response code #{err.response_code}, retrying...(depth=#{depth})")
         sleep(0.3)
       rescue SystemExit, Interrupt => err
-        sleep(3600) until Thread.current == ::MainThread
+        puts "#{SPLIT_LINE}Terminate singal received!"
         raise err
       rescue Exception => err
         warning("\nAn error occurred during fetch page! #{err}, retrying...(depth=#{depth})")
@@ -169,6 +171,7 @@ class Agent < Mechanize
     @thread_lock = true
     @flag_download_hd = download_hd
     img_url = nil
+    check_wait_limit(@current_doc)
     if download_hd
       img_url = @current_doc.links_with(href: /https:\/\/e-hentai.org\/fullimg.php/).first.href rescue nil
     end
@@ -184,12 +187,13 @@ class Agent < Mechanize
 
   def on_download_failed(parent_url)
     puts "Download failed in #{parent_url}"
-    $failed_images << FailedImage.new(parent_url, @cur_page, @cur_folder, @flag_download_hd)
+    $failed_images << FailedImage.new(parent_url, @cur_page, @cur_folder, @flag_download_hd, @cur_gid, @cur_token)
     return nil
   end
 
   def download_image_async(img_url)
-    filename = "#{@cur_folder}/#{@cur_page.to_fileid}.jpg"
+    file_ext = img_url.split('.').last
+    filename = "#{@cur_folder}/#{@cur_page.to_fileid}.#{file_ext}"
     if ::File.exist?(filename)
       return puts("#{filename} already exists, skip")
     end
@@ -225,14 +229,25 @@ class Agent < Mechanize
   end
 
   def redownload_images(imgs)
-    imgs.each do |info|
-      @cur_parent_url = info.page_url
-      @cur_page       = info.id
-      @cur_folder     = info.folder
-      @current_doc = fetch(@cur_parent_url, fallback: Proc.new{on_fetch_failed( @cur_parent_url)})
-      Dir.mkdir(@cur_folder) unless ::File.exist?(@cur_folder)
-      dowload_current_image(info.hd)
-      wait4download()
+    imgs.each_with_index do |info, i|
+      begin
+        @cur_parent_url = info.page_url
+        @cur_page       = info.id
+        @cur_folder     = info.folder
+        @current_doc = fetch(@cur_parent_url, fallback: Proc.new{on_fetch_failed( @cur_parent_url)})
+        Dir.mkdir(@cur_folder) unless ::File.exist?(@cur_folder)
+        dowload_current_image(info.hd)
+        wait4download()
+      rescue SystemExit, Interrupt => err
+        puts "Termiante singal received, merging retrying images"
+        $mutex.synchronize{
+          $download_targets ||= []
+          $download_targets += imgs[i...imgs.size].collect{|o| {'gid'=>o.gid, 'token'=>o.gtoken} }
+          $download_targets.uniq!{|obj| obj['gid']}
+        }
+        raise err
+        break
+      end
     end
   end
 
@@ -259,9 +274,9 @@ class Agent < Mechanize
     collected_cnt = 0
     @current_doc.links_with(href: @image_url_regex).uniq{|s| s.href}.each do |link|
       img_id = link.href.split('-').last.to_i.to_fileid
-      img_filename = "#{@cur_folder}/#{img_id}.jpg"
-      if ::File.exist?(img_filename)
-        puts "#{img_filename} already existed, skip"
+      img_filenames = ImageFileExtensions.collect{|ext| "#{@cur_folder}/#{img_id}.#{ext}"}
+      if (_n = img_filenames.index{|fs| ::File.exist?(fs)})
+        puts "#{img_filenames[_n]} already existed, skip"
         next
       end
       collected_cnt += 1
