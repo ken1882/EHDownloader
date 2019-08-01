@@ -187,7 +187,9 @@ class Agent < Mechanize
 
   def on_download_failed(parent_url)
     puts "Download failed in #{parent_url}"
-    $failed_images << FailedImage.new(parent_url, @cur_page, @cur_folder, @flag_download_hd, @cur_gid, @cur_token)
+    $mutex.synchronize{
+      $failed_images << FailedImage.new(parent_url, @cur_page, @cur_folder, @flag_download_hd, @cur_gid, @cur_token)
+    }
     return nil
   end
 
@@ -200,6 +202,11 @@ class Agent < Mechanize
     img = self.fetch(img_url, fallback: Proc.new{on_download_failed(@cur_parent_url)}, no_loose: true)
     unless img.is_a?(::Mechanize::Image)
       warning("Unable to get original image from #{@cur_parent_url}, please check your cookie or download limits!")
+      return unless Thread.current == ::MainThread
+      request_continue("Do you want to continue anyway?", no: Proc.new{exit()})
+      $mutex.synchronize{
+        $failed_images << FailedImage.new(@cur_parent_url, @cur_page, @cur_folder, true, @cur_gid, @cur_token)
+      }
       return
     end
     img.save(filename)
@@ -234,6 +241,8 @@ class Agent < Mechanize
         @cur_parent_url = info.page_url
         @cur_page       = info.id
         @cur_folder     = info.folder
+        @cur_gid        = info.gid
+        @cur_token      = info.gtoken
         @current_doc = fetch(@cur_parent_url, fallback: Proc.new{on_fetch_failed( @cur_parent_url)})
         Dir.mkdir(@cur_folder) unless ::File.exist?(@cur_folder)
         dowload_current_image(info.hd)
