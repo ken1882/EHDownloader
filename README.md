@@ -138,3 +138,6 @@ Open `targets.txt`, one link per line and there're some examples insides already
   
 按下對應的數字按鍵即可執行該功能，若要中斷，則按下`Ctrl + C`，並可選擇是否斷點續傳<br>
 Press the corresponding key to run the function, press `Ctrl + C` if you want to abort, and you can choose whether to save in order to continue this aborted download.
+
+若要暫停，則先啟用cmd的[快速編輯模式](https://answers.microsoft.com/zh-hant/windows/forum/windows_7-files/%E5%91%BD%E4%BB%A4%E6%8F%90%E7%A4%BA%E5%AD%97/97d2d0d2-ad06-410d-a297-cdc92b3feac8)，接著在小黑窗的範圍內隨便選取一個範圍反白即可；之後按右鍵則可繼續。<br>
+If you want to pause, first [enable the quick edit mode in cmd](https://www.google.com/search?q=how+to+enable+quick+edit+mode), then select anywhere in the window to pause; to resume, just right click anywhere in the window.
