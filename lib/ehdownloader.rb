@@ -1,12 +1,13 @@
 module EHentaiDownloader
   mattr_reader :agent_head, :agent_tail, :config, :cur_folder, :total_num
   mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
+  mattr_reader :cur_folder, :cur_gid, :cur_token
 
   GalleryURLRegex = /https:\/\/e-hentai.org\/g\/(\d+)\/(.+)/i
   ResultJsonFilename = "_metadata.json"
   BaseURL = "https://e-hentai.org/g/"
   TotalResult_regex = /Showing (.+) result/i
-  TotalImg_regex    = /Showing(.+)of (.+) images/i
+  TotalImg_regex    = /Showing (\d+) - (\d+) of (.+) images/i
 
   TypeBitset = {
     :misc       => 0,
@@ -225,7 +226,7 @@ module EHentaiDownloader
   def get_total_number()
     if @current_doc.links.size == 0
       puts @current_doc.body
-      puts "Traffic overloaded...please wait for the ban exipres or switch your cookie."
+      puts "Traffic overloaded...please wait for the ban exipres or switch your ip/cookie."
       exit()
     end
     puts @current_doc.css("[@class='ip']")[0].text
@@ -243,13 +244,13 @@ module EHentaiDownloader
     get_total_number()
     return unless prepare_collect_metas()
     collect_metas()
-    sleep(1) while @agent_head.working? || @agent_tail.working?
+    wait_worker_finish()
     output_metas()
     puts "#{SPLIT_LINE}Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
 
     return if @config[:meta_only]
     start_download()
-    sleep(1) while @agent_head.working? || @agent_tail.working?
+    wait_worker_finish()
     puts("Download completed!")
     process_failed_downloads()
   end
@@ -280,24 +281,22 @@ module EHentaiDownloader
     if @config[:set_start_page]
       request_continue("Setting scan range manually?", yes: Proc.new{
         _in_st = (input("Start from (#{0}~#{total_pages}): ").to_i rescue nil) until _in_st.is_a?(Numeric)
-        _in_ed = (input("End at (#{mid}~#{@agent_tail.end_page}): ").to_i  rescue nil) until _in_ed.is_a?(Numeric)
+        _in_ed = (input("End at (#{_in_st}~#{@agent_tail.end_page}): ").to_i  rescue nil) until _in_ed.is_a?(Numeric)
       })
     end
 
     if @agent_head.start_page.nil?
       _in_st, _in_ed = 0, total_pages
     end
-    mid = total_pages / 2
-    @agent_head.start_page = _in_st
-    @agent_head.end_page = @agent_tail.start_page = mid
-    @agent_tail.end_page = _in_ed
-    puts "Head: page#{@agent_head.start_page}~page#{mid}; Tail: page#{mid}~page#{_in_ed}"
-    @worker = Thread.new{@agent_tail.start_scan(1)}
+    set_agent_partition_pages(_in_ed - _in_st)
+    puts "Head: page#{_in_st}~page#{@agent_head.end_page}; Tail: page#{@agent_tail.start_page}~page#{_in_ed}"
+    @worker = Thread.new{@agent_tail.start_scan(1)} if @agent_head.end_page != @agent_tail.end_page
     @agent_head.start_scan(0)
     sleep(1)
   end
 
   def output_oom_metas()
+    @new_json.uniq!{|gallery| gallery['gid']}
     puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
     puts "Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
     cnt = 0
@@ -309,6 +308,7 @@ module EHentaiDownloader
   end
 
   def output_metas()
+    @new_json.uniq!{|gallery| gallery['gallery']}
     puts "#{SPLIT_LINE}Collected total of #{@new_json.size} new gallery infos (#{$existed_gal_cnt} existed)"
     @existed_json += @new_json
     @new_json = nil
@@ -319,6 +319,7 @@ module EHentaiDownloader
   end
 
   def start_download
+    $download_targets.uniq!{|gallery| gallery['gid']}
     _len = $download_targets.size
     puts("#{SPLIT_LINE}Start downloading total of #{_len} galleries")
     tmp_dw_targets = $download_targets.dup
@@ -337,10 +338,11 @@ module EHentaiDownloader
       raise err
     rescue Exception => err
       warning("Unhandled excpetion while downloading gallery")
+      puts report_exception(err), SPLIT_LINE
       $failed_galleries << FailedGallery.new(@cur_gid, @cur_token, nil)
       @flag_failed = true
     end
-    sleep(1) while !@flag_failed && @agent_head.working? || @agent_tail.working?
+    wait_worker_finish()
     if current_gallery_completed?
       puts "OK"
       $download_targets.delete({'gid' => @cur_gid, 'token' => @cur_token})
@@ -369,6 +371,13 @@ module EHentaiDownloader
     !@flag_failed
   end
 
+  def set_agent_partition_pages(total)
+    mid = total / 2
+    @agent_head.start_page = 0
+    @agent_head.end_page = @agent_tail.start_page = mid
+    @agent_tail.end_page = total
+  end
+
   def download_gallery(info)
     @flag_failed = false
     @cur_meta    = {}
@@ -383,29 +392,91 @@ module EHentaiDownloader
     end
     @parnet_url = "#{BaseURL}#{@cur_gid}/#{@cur_token}?nw=session"
     @current_doc = @agent_head.fetch(@parnet_url)
+    tmp = @agent_tail.fetch(@parnet_url) # bypass gallery warning
     if @current_doc.search(".gpc").text.match(TotalImg_regex)
-      @total_cnt = $2.tr(',','').to_i
+      @display_per_page = $2.to_f
+      @total_cnt = $3.tr(',','').to_i
       puts "Total images: #{@total_cnt}"
     else
       return on_gallery_failed()
     end
-    first_page = @current_doc.links_with(href: Regexp.new("#{info['gid']}-1")).first.uri
-    @current_doc = @agent_head.fetch(first_page, fallback: method(:on_gallery_failed))
-    last_page = @current_doc.links_with(href: Regexp.new("#{info['gid']}-#{@total_cnt}")).first.uri
-    mid = (@total_cnt / 2).to_i
-    # todo: change image scan method to quickly check existed images
-    @agent_head.start_page = 1
-    @agent_tail.start_page = @total_cnt
-    @agent_head.end_page   = mid
-    @agent_tail.end_page   = mid + 1
     $worker_cur_url = ['', '']
-    @worker = Thread.new{@agent_tail.start_download(1, last_page, @cur_gid, @cur_token)} if @total_cnt > 1
-    @agent_head.start_download(0, first_page, @cur_gid, @cur_token)
-    sleep(1)
+    if collect_image_needed?
+      collect_gallery_images()
+      wait_worker_finish()
+      @agent_head.collected_images = @agent_tail.collected_images = nil
+      @collected_images.uniq!.sort_by!{|ss| ss.split('-').last.to_i}
+      dump_collected_image_info()
+    else
+      puts "Load image meta from existed file"
+      @collected_images = load_undownloaded_image_from_file()
+    end
+    download_collected_images()
+    wait_worker_finish()
     if @agent_head.cur_page == @agent_head.end_page && @agent_tail.cur_page == @agent_tail.end_page
       $worker_cur_url = ['', '']
       @agent_head.clear_progress()
     end
+  end
+
+  def collect_gallery_images
+    @gallery_total_pages = (@total_cnt / @display_per_page).ceil()
+    puts "Collect image meta from total of #{@gallery_total_pages} pages"
+    @collected_images = []
+    last_page_url = @current_doc.uri.to_s + "?p=#{@gallery_total_pages-1}"
+    @agent_head.current_doc = @current_doc.dup
+    @agent_tail.current_doc = @agent_tail.fetch(last_page_url)
+    @agent_head.collected_images = @agent_tail.collected_images = @collected_images
+    set_agent_partition_pages(@gallery_total_pages)
+    puts "Collecting page #{@agent_head.start_page}~#{@agent_head.end_page} and #{@agent_tail.start_page}~#{@agent_tail.end_page}"
+    @worker = Thread.new{@agent_tail.collect_images(1)} if @gallery_total_pages > 1
+    @agent_head.collect_images(0)
+  end
+
+  def collect_image_needed?
+    _filename = "#{@cur_folder}/_imgmeta.json"
+    return true unless File.exist?(_filename)
+    File.open(_filename, 'r') do |file|
+      return false if JSON.load(file).size == @cur_meta['filecount'].to_i
+    end
+    return true
+  end
+
+  def load_undownloaded_image_from_file
+    _filename = "#{@cur_folder}/_imgmeta.json"
+    all_url = []; re = [];
+    File.open(_filename, 'r') do |file|
+      all_url = JSON.load(file)
+    end
+    all_url.each do |url|
+      _id = url.split('-').last.to_i
+      re << url unless File.exist?("#{@cur_folder}/#{_id.to_fileid}.jpg")
+    end
+    return re
+  end
+
+  def dump_collected_image_info
+    _filename = "#{@cur_folder}/_imgmeta.json"
+    _cont = true
+    if File.exist?(_filename)
+      _existed = []
+      File.open(_filename, 'r'){|f| _existed = JSON.load(f)}
+      _cont = false if _existed.size > @collected_images.size
+    end
+    return unless _cont
+    File.open(_filename, 'w') do |file|
+      file.puts(JSON.pretty_generate(@collected_images))
+    end
+  end
+
+  def download_collected_images
+    @collected_images.uniq!
+    _len = @collected_images.size
+    puts "Collected #{_len} undownloaded images from #{@cur_folder}"
+    return if _len == 0
+    mid = _len / 2
+    @worker = Thread.new{@agent_tail.start_download(1, @collected_images[mid..._len])} if _len > 1
+    @agent_head.start_download(0, @collected_images[0...[1, mid].max])
   end
 
   def get_folder_name
@@ -509,7 +580,7 @@ module EHentaiDownloader
       Thread.new{@agent_tail.redownload_images(tmp_failed[mid..._len])}
     end
     @agent_head.redownload_images(tmp_failed[0...[1, mid].max])
-    sleep(1) while @agent_head.working? || @agent_tail.working?
+    wait_worker_finish()
     process_failed_downloads()
   end
 
@@ -552,9 +623,13 @@ module EHentaiDownloader
     init_collect_members()
     @total_num = dat[:total_num] || 0
     return unless prepare_collect_metas()
-    sleep(1)
-    sleep(1) while @agent_head.working? || @agent_tail.working?
+    wait_worker_finish()
     output_metas()
     puts "#{SPLIT_LINE}Time taken: #{to_readable_time_distance(Time.now - $meta_start_time)}"
+  end
+
+  def wait_worker_finish
+    sleep(1)
+    sleep(1) while @agent_head.working? || @agent_tail.working?
   end
 end

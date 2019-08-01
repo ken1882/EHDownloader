@@ -1,5 +1,6 @@
 class Agent < Mechanize
   attr_reader :current_doc, :existed_json, :flag_working, :new_json, :worker_id
+  attr_reader :collected_images
   attr_accessor :failed, :search_param
   attr_accessor :start_page, :end_page, :cur_page
 
@@ -12,6 +13,8 @@ class Agent < Mechanize
     super
   end
 
+  def current_doc=(doc); @current_doc = doc; end
+
   def working?; @flag_working; end
   def existed_json=(_out)
     return if @existed_json.equal?(_out)
@@ -21,6 +24,11 @@ class Agent < Mechanize
   def new_json=(_out)
     return if @new_json.equal?(_out)
     @new_json = _out
+  end
+
+  def collected_images=(_out)
+    return if @collected_images.equal?(_out)
+    @collected_images = _out
   end
 
   def fetch(*args, **kwargs, &block)
@@ -118,7 +126,7 @@ class Agent < Mechanize
     if ::File.exist?("#{@cur_folder}/_progress.dat")
       ::File.open("#{@cur_folder}/_progress.dat", 'rb') do |file|
         _dat = Marshal.load(file)
-        _url = (@end_page > @start_page ? _dat.first : _dat.last)
+        _url = _dat[@worker_id]
         puts "Prev progress loaded: #{_url}"
       end
     end
@@ -130,27 +138,29 @@ class Agent < Mechanize
     ::File.delete("#{@cur_folder}/_progress.dat")
   end
 
-  def start_download(_wid, init_url, gid, token)
-    @worker_id = _wid
+  def start_download(_wid, image_page_links)
     @flag_working = true
-    @cur_folder = EHentaiDownloader.cur_folder
-    @cur_gid, @cur_token = gid, token
+    @worker_id    = _wid
+    @cur_folder   = EHentaiDownloader.cur_folder
+    @cur_gid      = EHentaiDownloader.cur_gid
+    @cur_token    = EHentaiDownloader.cur_token
+    last_url      = ''
     eval_action("Check previous progress...") do 
-       _url = load_prev_progress()
-       _url = init_url.to_s if _url.length < 10
-       @current_doc = fetch(_url, fallback: Proc.new{on_fetch_failed(_url)})
+      last_url = load_prev_progress()
+      last_url = image_page_links.first if last_url.length < 10
     end
-    @cur_page = @current_doc.uri.to_s.split('-').last.to_i
-    loop do
-      break if @current_doc.nil?
-      @cur_parent_url = @current_doc.uri
-      $worker_cur_url[@worker_id] = @cur_parent_url.to_s rescue ''
+    last_url  = nil unless image_page_links.include?(last_url)
+    cur_index = image_page_links.index(last_url) || 0
+    _len = image_page_links.size
+    while cur_index < _len
+      link = image_page_links[cur_index]
+      @cur_page = link.to_s.split('-').last.to_i
+      @cur_parent_url = link.to_s
+      $worker_cur_url[@worker_id] = link.to_s
+      @current_doc = fetch(link, fallback: Proc.new{on_fetch_failed(link)})
       dowload_current_image()
       wait4download()
-      break if @end_page == @cur_page
-      @cur_page += (@end_page > @start_page ? 1 : -1)
-      next_link = get_next_link()
-      @current_doc = fetch(next_link, fallback: Proc.new{on_fetch_failed(next_link)})
+      cur_index += 1
     end
     @flag_working = false
   end
@@ -209,7 +219,7 @@ class Agent < Mechanize
     begin
       return @current_doc.links_with(href: Regexp.new("#{@cur_gid}-#{@cur_page}")).first.uri
     rescue Exception => err
-      puts "#{}#{@current_doc.uri}"
+      puts "#{err}#{@current_doc.uri}"
       raise err
     end
   end
@@ -226,4 +236,37 @@ class Agent < Mechanize
     end
   end
 
+  def collect_images(wid)
+    @flag_working = true
+    @worker_id    = wid
+    @cur_folder   = EHentaiDownloader.cur_folder
+    @cur_gid      = EHentaiDownloader.cur_gid
+    @cur_token    = EHentaiDownloader.cur_token
+    @image_url_regex  = Regexp.new("#{@cur_gid}-(\\d+)")
+    gallery_base_link = "https://e-hentai.org/g/#{@cur_gid}/#{@cur_token}/"
+    @cur_page = @start_page
+    loop do
+      _next_url = "#{gallery_base_link}?p=#{@cur_page}"
+      @current_doc = fetch(_next_url, fallback: Proc.new{on_fetch_failed(_next_url)})
+      collect_undownloaded_images()
+      break if @current_doc.nil? || @cur_page == @end_page
+      @cur_page += (@end_page > @start_page ? 1 : -1)
+    end
+    @flag_working = false
+  end
+
+  def collect_undownloaded_images
+    collected_cnt = 0
+    @current_doc.links_with(href: @image_url_regex).uniq{|s| s.href}.each do |link|
+      img_id = link.href.split('-').last.to_i.to_fileid
+      img_filename = "#{@cur_folder}/#{img_id}.jpg"
+      if ::File.exist?(img_filename)
+        puts "#{img_filename} already existed, skip"
+        next
+      end
+      collected_cnt += 1
+      $mutex.synchronize{@collected_images << link.href.to_s}
+    end
+    puts "#{collected_cnt} image meta collected"
+  end
 end
