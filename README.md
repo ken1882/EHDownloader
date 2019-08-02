@@ -6,8 +6,8 @@ https://github.com/ken1882/EHDownloader/releases
 
 ## 使用方式 | Usage
 
-如需使用Cookie, 推薦使用 [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg)輸出成JSON並到`cookie.json`全部貼上並取代。如果你的Cookie是贊助者cookie，搜尋功能理論上將會找到更多結果<br>
-If you want to use Cookie, recommending using [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg) to export them and paste on `cookie.json`, replacing what it's inside. If you're a sponsor you should be able to search with more results now.<br>
+如需使用Cookie, 推薦使用 [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg)輸出成JSON並到`cookie.json`全部貼上並取代。如果你的Cookie是贊助者cookie，搜尋功能理論上將會找到更多結果。[如何導入Cookie?](https://github.com/ken1882/EHDownloader/blob/master/README.md#%E5%B0%8E%E5%85%A5cookie--import-cookie)<br>
+If you want to use Cookie, recommending using [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg) to export them and paste on `cookie.json`, replacing what it's inside. If you're a sponsor you should be able to search with more results now.<br> [How to import cookie?](https://github.com/ken1882/EHDownloader/blob/master/README.md#%E5%B0%8E%E5%85%A5cookie--import-cookie)
 
 提供2種下載方式:
 - 搜尋下載 (下載所有搜尋到的畫廊)
