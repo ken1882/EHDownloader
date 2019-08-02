@@ -161,7 +161,7 @@ The zipped file contain the files as below shows
 * README.md: 部分說明文件 | Part of this instruction document.
 * targets.txt: 從檔案下載的導入文件, 使用方式見上方 | Source file of the "Download from file", for usage see the section above.
 
-解壓縮後打開`cookie.json`, 此處使用有自定義佈景主題的[notepad++](https://notepad-plus-plus.org/zh)<br>
+解壓縮後打開`cookie.json`, 此處使用有自定義佈景主題的[notepad++](https://notepad-plus-plus.org/zh/)<br>
 Extract the files and open `cookie.json`, this instruction use the [notepad++](https://notepad-plus-plus.org) with customed theme.
 ![](https://i.imgur.com/Izg8mrE.png)
 
