@@ -141,3 +141,30 @@ Press the corresponding key to run the function, press `Ctrl + C` if you want to
 
 若要暫停(如切換網路或VPN)，則先啟用cmd的[快速編輯模式](https://answers.microsoft.com/zh-hant/windows/forum/windows_7-files/%E5%91%BD%E4%BB%A4%E6%8F%90%E7%A4%BA%E5%AD%97/97d2d0d2-ad06-410d-a297-cdc92b3feac8)，接著在小黑窗的範圍內隨便選取一個範圍反白即可；之後按右鍵則可繼續。<br>
 If you want to pause(maybe you need to switch internet connection or VPN), first [enable the quick edit mode in cmd](https://www.google.com/search?q=how+to+enable+quick+edit+mode), then select anywhere in the window to pause; to resume, just right click anywhere in the window.
+
+## 導入Cookie | Import cookie
+下載[EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg)後，到網站上點選該擴充功能圖示，便會出現以下視窗(若只有一個cookie代表沒有登入)<br>
+After download [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg), go to the website and click on the add-on icon, the window as below should popup (if it only has 1 cookie, this means you haven't login in yet.)
+![](https://i.imgur.com/st92INr.png)<br>
+
+點選上圖紅圈處導出cookie, 內容將自動複製到剪貼簿<br>
+Click on the icon that red circle in the image above indicates to export your cookie.<br>
+![](https://i.imgur.com/96HuIgw.png)
+
+包含主程式在內的壓縮檔含有以下內容<br>
+The zipped file contain the files as below shows
+![](https://i.imgur.com/HOBBO7Y.png)
+* cacert.perm: HTTPS憑證 | https certificate file.
+* config.txt: 搜尋下載的選項配置, 使用方式見上方 | Configuration file of the search download, for usage see the section above.
+* cookie.json: 要導入的Cookie檔案 | The import cookie file.
+* EHDownloader.exe: 主程式, 除直接開啟外可接受"-v"參數來查詢版本 | Main program, besides open directly, you can also pass "-v" argument to see the version.
+* README.md: 部分說明文件 | Part of this instruction document.
+* targets.txt: 從檔案下載的導入文件, 使用方式見上方 | Source file of the "Download from file", for usage see the section above.
+
+解壓縮後打開`cookie.json`, 此處使用有自定義佈景主題的nodepad++<br>
+Extract the files and open `cookie.json`, this instruction use the nodepad++ with customed theme.
+![](https://i.imgur.com/Izg8mrE.png)
+
+將原本的內容全部刪除後, 貼上先前複製的cookie內容接著再儲存檔案即可完成<br>
+Delete the text that already inside the file, paste the cookie content we exported earlier then save the file. Done.
+![](https://i.imgur.com/AVIPvmS.png)
