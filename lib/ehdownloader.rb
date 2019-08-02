@@ -3,9 +3,7 @@ module EHentaiDownloader
   mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
   mattr_reader :cur_folder, :cur_gid, :cur_token
 
-  GalleryURLRegex = /https:\/\/e-hentai.org\/g\/(\d+)\/(.+)/i
   ResultJsonFilename = "_metadata.json"
-  BaseURL = "https://e-hentai.org/g/"
   TotalResult_regex = /Showing (.+) result/i
   TotalImg_regex    = /Showing (\d+) - (\d+) of (.+) images/i
   ImageFileExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'webp']
@@ -221,7 +219,7 @@ module EHentaiDownloader
   end
 
   def get_page_url(page_id=0)
-    "https://e-hentai.org/?page=#{page_id}#{get_search_param()}#{get_advsearch_param()}"
+    "#{$cur_host}/?page=#{page_id}#{get_search_param()}#{get_advsearch_param()}"
   end
 
   def get_total_number()
@@ -258,6 +256,17 @@ module EHentaiDownloader
 
   def prepare_collect_metas
     _continue = true
+    if search_options(:filter).strip.length > 1 && @total_num > 500000
+      puts "#{SPLIT_LINE}You have set the filter but searched with #{@total_num} results."
+      puts "This means you're usign e-hentai cookie but not exhentai cookie."
+      puts SPLIT_LINE
+      puts "Transforming cookies from e-hentai to exhentai"
+      eval_action("") do
+        @agent_tail.fetch(get_page_url())
+        @current_doc = @agent_head.fetch(get_page_url())
+      end
+      get_total_number()
+    end
     request_continue("#{SPLIT_LINE}Searched with #{@total_num} results\nContinue?", no: Proc.new{_continue = false})
     return false unless _continue
     $meta_start_time = Time.now
@@ -392,7 +401,7 @@ module EHentaiDownloader
       puts "#{@cur_folder} has already downloaded all files, skip"
       return
     end
-    @parnet_url = "#{BaseURL}#{@cur_gid}/#{@cur_token}?nw=session"
+    @parnet_url = "#{$cur_host}/g/#{@cur_gid}/#{@cur_token}?nw=session"
     @current_doc = @agent_head.fetch(@parnet_url)
     tmp = @agent_tail.fetch(@parnet_url) # bypass gallery warning
     if @current_doc.search(".gpc").text.match(TotalImg_regex)

@@ -70,7 +70,7 @@ class Agent < Mechanize
   end
 
   def get_page_url(page_id=0)
-    "https://e-hentai.org/?page=#{page_id}#{@search_param}"
+    "#{$cur_host}/?page=#{page_id}#{@search_param}"
   end
 
   def start_scan(_id)
@@ -93,7 +93,7 @@ class Agent < Mechanize
 
   def collect_metas
     @current_doc = check_wait_ban(@current_doc)
-    re  = @current_doc.links_with(href: /https:\/\/e-hentai.org\/g\//).uniq{|l| l.href}
+    re  = @current_doc.links_with(href: /https:\/\/e(?:-|x)hentai.org\/g\//).uniq{|l| l.href}
     scanned_cnt = 0
     re.each do |link|
       _url = link.href.split('/')
@@ -173,7 +173,7 @@ class Agent < Mechanize
     img_url = nil
     check_wait_limit(@current_doc)
     if download_hd
-      img_url = @current_doc.links_with(href: /https:\/\/e-hentai.org\/fullimg.php/).first.href rescue nil
+      img_url = @current_doc.links_with(href: /https:\/\/e(?:-|x)hentai.org\/fullimg.php/).first.href rescue nil
     end
     img_url = @current_doc.css("[@id='img']").first.attr('src') if img_url.nil?
     @worker = Thread.new{download_image_async(img_url,); @thread_lock = false;}
@@ -267,7 +267,7 @@ class Agent < Mechanize
     @cur_gid      = EHentaiDownloader.cur_gid
     @cur_token    = EHentaiDownloader.cur_token
     @image_url_regex  = Regexp.new("#{@cur_gid}-(\\d+)")
-    gallery_base_link = "https://e-hentai.org/g/#{@cur_gid}/#{@cur_token}/"
+    gallery_base_link = "#{$cur_host}/g/#{@cur_gid}/#{@cur_token}/"
     @cur_page = @start_page
     loop do
       _next_url = "#{gallery_base_link}?p=#{@cur_page}"

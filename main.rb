@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 $:.unshift File.dirname($0)
 
-VERSION = "0.1.3p2"
+VERSION = "0.1.4"
 SPLIT_LINE = '-'*21 + 10.chr
 
 if ARGV.include?("-v") || ARGV.include?("--version")
@@ -23,6 +23,8 @@ $fetch_sleep_rrange    = 3
 $mutex = Mutex.new
 $fetched_cnt = 0
 $worker_cur_url = ['', '']
+Hosts = ["https://exhentai.org", "https://e-hentai.org"]
+$cur_host = Hosts[0].dup
 
 # fix windows getrlimit not implement bug
 if Gem.win_platform?
@@ -49,9 +51,18 @@ Dir.mkdir("tmp/") unless File.exist?("tmp/")
 Dir.mkdir(DownloadFolder) unless File.exist?(DownloadFolder)
 
 def start
+  EHentaiDownloader.initialize
+  current_doc = EHentaiDownloader.agent_head.fetch($cur_host)
+  if current_doc.links.size > 3
+    puts "#{SPLIT_LINE}Successfully connected to sad panda!"
+    puts SPLIT_LINE
+  else
+    puts "Unable connect to sad panda, please check your `cookie.json` whether has correct information"
+    request_continue("Continue to e-hentai.org?", no: Proc.new{exit()})
+    $cur_host = Hosts[1]
+  end
   while $running
     begin
-      EHentaiDownloader.initialize
       detect_tmp_metas()
       dw_or_mt = EHentaiDownloader.config[:meta_only] ? "Collect metas" : "Download"
       messages = [
