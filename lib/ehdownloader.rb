@@ -70,6 +70,13 @@ module EHentaiDownloader
     @agent_tail.existed_json = @existed_json
   end
 
+  def cookie_transform_needed?
+    _ck = []
+    File.open("cookie.json"){|f| _ck = JSON.load(f)}
+    return false if _ck.size < 2
+    return _ck.first['domain'] == ".e-hentai.org" && $cur_host == Hosts[0]
+  end
+
   def load_config_files
     eval_action("Loading config file..."){load_config()}
     eval_action("Loading cookie..."){load_cookie()}
@@ -254,17 +261,25 @@ module EHentaiDownloader
     process_failed_downloads()
   end
 
+  def transform_cookies
+    return if $cur_host == Hosts[1]
+    return unless cookie_transform_needed?
+    puts SPLIT_LINE
+    puts "Transforming cookies..."
+    eval_action("") do
+      @agent_tail.fetch(get_page_url())
+      @agent_head.fetch(get_page_url())
+    end
+    puts SPLIT_LINE
+  end
+
   def prepare_collect_metas
     _continue = true
     if search_options(:filter).strip.length > 1 && @total_num > 500000
       puts "#{SPLIT_LINE}You have set the filter but searched with #{@total_num} results."
       puts "This means you're usign e-hentai cookie but not exhentai cookie."
-      puts SPLIT_LINE
-      puts "Transforming cookies from e-hentai to exhentai"
-      eval_action("") do
-        @agent_tail.fetch(get_page_url())
-        @current_doc = @agent_head.fetch(get_page_url())
-      end
+      transform_cookies()
+      @current_doc = @agent_head.fetch(get_page_url())
       get_total_number()
     end
     request_continue("#{SPLIT_LINE}Searched with #{@total_num} results\nContinue?", no: Proc.new{_continue = false})

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 $:.unshift File.dirname($0)
 
-VERSION = "0.1.4"
+VERSION = "0.1.4p1"
 SPLIT_LINE = '-'*21 + 10.chr
 
 if ARGV.include?("-v") || ARGV.include?("--version")
@@ -67,7 +67,7 @@ def start
       dw_or_mt = EHentaiDownloader.config[:meta_only] ? "Collect metas" : "Download"
       messages = [
         "Exit",
-        "#{dw_or_mt} from `conig.txt`",
+        "#{dw_or_mt} from `config.txt`",
         "Download from file",
         "Retry failed downloads",
         "Resume a download",
@@ -76,6 +76,7 @@ def start
       list = messages.collect{|m| UI_Selector::Item.new(m)}
       EHentaiDownloader.initialize
       _in = UI_Selector.start(list: list, head_msg: "Select a function", quit: method(:exit_exh))
+      EHentaiDownloader.transform_cookies()
       case _in
       when 0; puts("Bye!"); exit_exh();
       when 1; EHentaiDownloader.start_scan();

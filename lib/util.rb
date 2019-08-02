@@ -106,8 +106,8 @@ end
 
 def check_wait_limit(page)
   loop do
-    img_link = page.css("[@id='img']").first.attr('src')  
-    break unless img_link.to_s == "https://ehgt.org/g/509.gif"
+    img_link = page.css("[@id='img']").first.attr('src') 
+    break unless img_link.to_s == "https://ehgt.org/g/509.gif" || img_link.to_s == "https://exhentai.org/img/509.gif"
     puts "#{SPLIT_LINE}Your limit of viewing gallery image has reached. Program will pause for 1 hour."
     puts "Or press `F5` to force continue"
     watied = 0
@@ -117,7 +117,8 @@ def check_wait_limit(page)
       if key_triggered?(VK_F5)
         puts "Trying reconnect..."
         page = fetch(page.uri)
-        if page.css("[@id='img']").first.attr('src') == "https://ehgt.org/g/509.gif"
+        img_link = page.css("[@id='img']").first.attr('src')
+        if img_link == "https://ehgt.org/g/509.gif" || img_link == "https://exhentai.org/img/509.gif"
           puts "The limit still has reached the maximum"
         else
           puts "Succeed!"
@@ -211,6 +212,7 @@ def process_download_resume()
   download_data = load_download_resume_files()
   _len = download_data.size
   return if _len == 0
+  
   list = download_data.collect do |dat|
     UI_Selector::Item.new("#{dat[:filename]} (filter = #{dat[:filter]}")
   end
