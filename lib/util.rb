@@ -105,8 +105,9 @@ def check_wait_ban(page)
 end
 
 def check_wait_limit(page)
-  img_link = page.css("[@id='img']").first.attr('src')
-  while img_link.to_s == "https://ehgt.org/g/509.gif"
+  loop do
+    img_link = page.css("[@id='img']").first.attr('src')  
+    break unless img_link.to_s == "https://ehgt.org/g/509.gif"
     puts "#{SPLIT_LINE}Your limit of viewing gallery image has reached. Program will pause for 1 hour."
     puts "Or press `F5` to force continue"
     watied = 0
