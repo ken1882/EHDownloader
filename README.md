@@ -91,7 +91,8 @@ Below are contents of advanced search<br>
 		# 最低評價星級 | Min. star rating
 		:min_star     => 0,
 
-		# 本本頁數 (預設為1~9999頁) | Pages between
+		# 本本頁數, 即搜尋含有多少圖片的畫廊 (預設為1~9999頁)
+		# How many images the gallery you want to search between?
 		:page_between => [1, 9999],
 		
 		# 不啟用E站的預設過濾器 | Disable default filter in the website
@@ -148,7 +149,7 @@ If you want to pause(maybe you need to switch internet connection or VPN), first
 
 ## 導入Cookie | Import cookie
 下載[EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg)後，到網站上點選該擴充功能圖示，便會出現以下視窗(若只有一個cookie代表沒有登入)<br>
-After download [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg), go to the website and click on the add-on icon, the window as below should popup (if it only has 1 cookie, this means you haven't login in yet.)
+After download [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg), go to the website and click on the add-on icon, the window as below should popup (if it only has 1 cookie, this means you haven't login in yet.)<br>
 ![](https://i.imgur.com/st92INr.png)<br>
 
 點選上圖紅圈處導出cookie, 內容將自動複製到剪貼簿<br>
@@ -156,7 +157,7 @@ Click on the icon that red circle in the image above indicates to export your co
 ![](https://i.imgur.com/96HuIgw.png)
 
 包含主程式在內的壓縮檔含有以下內容<br>
-The zipped file contain the files as below shows
+The zipped file contain the files as below shows<br>
 ![](https://i.imgur.com/HOBBO7Y.png)
 * cacert.perm: HTTPS憑證 | https certificate file.
 * config.txt: 搜尋下載的選項配置, 使用方式見上方 | Configuration file of the search download, for usage see the section above.
@@ -166,9 +167,9 @@ The zipped file contain the files as below shows
 * targets.txt: 從檔案下載的導入文件, 使用方式見上方 | Source file of the "Download from file", for usage see the section above.
 
 解壓縮後打開`cookie.json`, 此處使用有自定義佈景主題的[notepad++](https://notepad-plus-plus.org/zh/)<br>
-Extract the files and open `cookie.json`, this instruction use the [notepad++](https://notepad-plus-plus.org) with customed theme.
+Extract the files and open `cookie.json`, this instruction use the [notepad++](https://notepad-plus-plus.org) with customed theme.<br>
 ![](https://i.imgur.com/Izg8mrE.png)
 
 將原本的內容全部刪除後, 貼上先前複製的cookie內容接著再儲存檔案即可完成<br>
-Delete the text that already inside the file, paste the cookie content we exported earlier then save the file. Done.
+Delete the text that already inside the file, paste the cookie content we exported earlier then save the file. Done.<br>
 ![](https://i.imgur.com/AVIPvmS.png)
