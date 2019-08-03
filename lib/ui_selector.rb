@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 module UI_Selector
   Item = Struct.new(:message, :action)
 

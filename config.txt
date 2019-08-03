@@ -14,8 +14,8 @@
       :arist_cg   => 1,
       :game_cg    => 1,
       :image_set  => 1,
-      :cosplay    => 1,
-      :asian_porn => 0,
+      :cosplay    => 0,
+      :asian_porn => 1,
       :non_h      => 1,
       :western    => 1
     },
@@ -56,6 +56,6 @@
   # 額外的隨機休息秒數增加(0~N秒, 預設3)
   :fetch_sleep_rrange     => 0,
 
-  # 手動輸入抓取的範圍
+  # 手動輸入抓取的搜尋結果範圍
   :set_start_page         => 0,
 }

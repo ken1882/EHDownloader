@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 module EHentaiDownloader
   mattr_reader :agent_head, :agent_tail, :config, :cur_folder, :total_num
   mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
@@ -410,7 +411,9 @@ module EHentaiDownloader
     @cur_gid, @cur_token = info['gid'], info['token']
     @cur_meta    = request_gallery_meta([[@cur_gid, @cur_token]]).first
     @cur_meta['filecount'] = @cur_meta['filecount'].tr(',','').to_i
-    @cur_folder  = build_gallery_folder()
+    @cur_folder = get_folder_name()
+    @cur_folder = rename_folder if title_duplicated?
+    build_gallery_folder()
     dump_cur_meta()
     unless gallery_download_needed?
       puts "#{@cur_folder} has already downloaded all files, skip"
@@ -518,11 +521,10 @@ module EHentaiDownloader
       folder_name = @cur_meta['title']
     end
     folder_name.tr!('\\/:*?\"><|','')
-    return "#{DownloadFolder}#{folder_name}/"
+    return "#{DownloadFolder}#{folder_name}"
   end
 
   def build_gallery_folder()
-    @cur_folder = get_folder_name()
     Dir.mkdir(@cur_folder) unless File.exist?(@cur_folder)
     return @cur_folder
   end
@@ -681,5 +683,18 @@ module EHentaiDownloader
   def wait_worker_finish
     sleep(1)
     sleep(1) while @agent_head.working? || @agent_tail.working?
+  end
+
+  def title_duplicated?
+    _filename = "#{@cur_folder}/_meta.json"
+    return false unless File.exist?(_filename)
+    File.open(_filename, 'r') do |file|
+      return false if (JSON.load(file)['gid'] == @cur_meta['gid'].to_i rescue false)
+    end
+    return true
+  end
+
+  def rename_folder
+    "#{@cur_folder}-#{@cur_meta['gid']}"
   end
 end

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 class Agent < Mechanize
   attr_reader :current_doc, :existed_json, :flag_working, :new_json, :worker_id
   attr_reader :collected_images
@@ -5,6 +6,9 @@ class Agent < Mechanize
   attr_accessor :start_page, :end_page, :cur_page
 
   ImageFileExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'webp']
+  BandwidthExcessedURL = ["https://ehgt.org/g/509.gif", "https://exhentai.org/img/509.gif"]
+  BandwidthExcessedImgSize = [425, 750]
+  InputFPS = 40
 
   def initialize(*args)
     @current_doc = nil
@@ -209,8 +213,25 @@ class Agent < Mechanize
       }
       return
     end
+    return on_509_fail if is_509_image?(img, img_url)
     img.save(filename)
     puts "#{filename} saved"
+  end
+
+  def is_509_image?(img, source_url=nil)
+    return false unless source_url && source_url.split('/').last == "509.gif"
+    return false unless source_url && source_url.split('.').last == "gif"
+    _dimension = get_gif_size(img.body_io)
+    return false unless _dimension && _dimension == BandwidthExcessedImgSize
+    return true
+  end
+
+  def on_509_fail
+    puts "#{SPLIT}An 509(Bandwidth limit excessed) image is detected!"
+    puts "#{@cur_parent_url} will consider as an failed image"
+    $mutex.synchronize{
+      $failed_images << FailedImage.new(@cur_parent_url, @cur_page, @cur_folder, true, @cur_gid, @cur_token)
+    }
   end
 
   def wait4download()
@@ -269,6 +290,7 @@ class Agent < Mechanize
     @image_url_regex  = Regexp.new("#{@cur_gid}-(\\d+)")
     gallery_base_link = "#{$cur_host}/g/#{@cur_gid}/#{@cur_token}/"
     @cur_page = @start_page
+    @last_page_content_hash = Digest::SHA256.hexdigest("_base_")
     loop do
       _next_url = "#{gallery_base_link}?p=#{@cur_page}"
       @current_doc = fetch(_next_url, fallback: Proc.new{on_fetch_failed(_next_url)})
@@ -281,8 +303,10 @@ class Agent < Mechanize
 
   def collect_undownloaded_images
     collected_cnt = 0
+    cur_page_content_hash = ''
     @current_doc.links_with(href: @image_url_regex).uniq{|s| s.href}.each do |link|
       img_id = link.href.split('-').last.to_i.to_fileid
+      cur_page_content_hash += "#{img_id}"
       img_filenames = ImageFileExtensions.collect{|ext| "#{@cur_folder}/#{img_id}.#{ext}"}
       if (_n = img_filenames.index{|fs| ::File.exist?(fs)})
         puts "#{img_filenames[_n]} already existed, skip"
@@ -291,6 +315,68 @@ class Agent < Mechanize
       collected_cnt += 1
       $mutex.synchronize{@collected_images << link.href.to_s}
     end
+    cur_page_content_hash = Digest::SHA256.hexdigest(cur_page_content_hash)
     puts "#{collected_cnt} image meta collected"
+    if cur_page_content_hash == @last_page_content_hash
+      puts "Duplicated website page fetch detected! Abort collecting"
+      @cur_page = @end_page
+    end
+    @last_page_content_hash = cur_page_content_hash
   end
+
+  # Check if banned, and wait if true
+  def check_wait_ban(page)
+    delta_sec = 1.0 / InputFPS
+    while page.links.size == 0
+      puts "#{SPLIT_LINE}Traffic overloaded! Sleep for 1 hour to wait the ban expires"
+      puts "Press `F5` to force continue"
+      waited = 0
+      while waited < 60 * 60
+        sleep(delta_sec)
+        waited += delta_sec
+        if key_triggered?(VK_F5)
+          puts "Trying reconnect..."
+          page = fetch(page.uri)
+          if page.links.size == 0
+            puts "Ban still remains! Response Body:"
+            puts page.body + 10.chr
+          else
+            puts "Succeed!"
+            break
+          end
+        end
+      end # while waiting
+      page = fetch(page.uri)
+    end
+    return page
+  end
+
+  def check_wait_limit(page)
+    delta_sec = 1.0 / InputFPS
+    loop do
+      img_link = page.css("[@id='img']").first.attr('src') 
+      break unless BandwidthExcessedURL.include?(img_link.to_s)
+      puts "#{SPLIT_LINE}Your limit of viewing gallery image has reached. Program will pause for 1 hour."
+      puts "Or press `F5` to force continue"
+      waited = 0
+      while waited < 60 * 60
+        sleep(delta_sec)
+        waited += delta_sec
+        if key_triggered?(VK_F5)
+          puts "Trying reconnect..."
+          page = fetch(page.uri)
+          img_link = page.css("[@id='img']").first.attr('src')
+          if BandwidthExcessedURL.include?(img_link.to_s)
+            puts "The limit still has reached the maximum"
+          else
+            puts "Succeed!"
+            break
+          end
+        end
+      end # while waiting
+      page = fetch(page.uri)
+    end
+    return page
+  end
+
 end

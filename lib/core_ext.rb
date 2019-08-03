@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 class Object
   def boolean?; self == true || self == false; end
 end

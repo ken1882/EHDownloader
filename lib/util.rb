@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require 'win32api'
 
 GetAsyncKeyState = Win32API.new('user32', "GetAsyncKeyState", 'i', 'i')
@@ -5,13 +6,12 @@ VK_F5 = 0x74
 
 $key_states = []
 $key_called_cnt = 0
+
 def key_triggered?(vt)
-  $key_called_cnt += 1
   re = (GetAsyncKeyState.call(vt) & 0x8000) != 0
-  $key_states[vt] = true if re
-  if $key_called_cnt > 3
-    $key_states = []
-  end
+  $key_states[vt]  = true if re
+  $key_states      = [] if $key_called_cnt > 3
+  $key_called_cnt += 1
   return re || $key_states[vt]
 end
 
@@ -51,19 +51,33 @@ def exit(*args)
   exit_exh(*args)
 end
 
+def get_gif_size(gif)
+  return IO.read(gif)[6..10].unpack('SS') if gif.respond_to?(:end_with?) && gif.end_with?(".gif")
+  return gif.read[6..10].unpack('SS')
+end
+
 # Request gallery meta with API
-def request_gallery_meta(gidlist)
-  gidlist = gidlist[0...25] if gidlist.size > 25
-  post_param = {
-    "method" => "gdata",
-    "gidlist" => gidlist,
-    "namespace" => 1,
-  }
-  response_str = Net::HTTP.post(
-    URI('https://api.e-hentai.org/api.php'), 
-    post_param.to_json,  
-    "Content-Type" => "application/json").body  
-  return JSON.parse(response_str)['gmetadata']
+def request_gallery_meta(gidlist, depth=0)
+  begin
+    gidlist = gidlist[0...25] if gidlist.size > 25
+    post_param = {
+      "method" => "gdata",
+      "gidlist" => gidlist,
+      "namespace" => 1,
+    }
+    response_str = Net::HTTP.post(
+      URI('https://api.e-hentai.org/api.php'), 
+      post_param.to_json,  
+      "Content-Type" => "application/json").body  
+    return JSON.parse(response_str)['gmetadata']
+  rescue Exception => err
+    depth += 1
+    raise err if depth > 3
+    puts "#{SPLIT_LINE}An error occurred during request meta!"
+    puts report_exception(err)
+    puts "#{SPLIT_LINE}Retrying...(depth=#{depth}/3)"
+    request_gallery_meta(gidlist, depth)
+  end
 end
 
 def eval_action(load_msg='', &block)
@@ -76,59 +90,6 @@ def eval_action(load_msg='', &block)
     puts("This action will be skipped")
   end
   puts("succeed")
-end
-
-# Check if banned, and wait if true
-def check_wait_ban(page)
-  while page.links.size == 0
-    puts "#{SPLIT_LINE}Traffic overloaded! Sleep for 1 hour to wait the ban expires"
-    puts "Press `F5` to force continue"
-    watied = 0
-    while watied < 60 * 60
-      sleep(0.05)
-      watied += 0.05
-      if key_triggered?(VK_F5)
-        puts "Trying reconnect..."
-        page = fetch(page.uri)
-        if page.links.size == 0
-          puts "Ban still remains! Response Body:"
-          puts page.body + 10.chr
-        else
-          puts "Succeed!"
-          break
-        end
-      end
-    end # while waiting
-    page = fetch(page.uri)
-  end
-  return page
-end
-
-def check_wait_limit(page)
-  loop do
-    img_link = page.css("[@id='img']").first.attr('src') 
-    break unless img_link.to_s == "https://ehgt.org/g/509.gif" || img_link.to_s == "https://exhentai.org/img/509.gif"
-    puts "#{SPLIT_LINE}Your limit of viewing gallery image has reached. Program will pause for 1 hour."
-    puts "Or press `F5` to force continue"
-    watied = 0
-    while watied < 60 * 60
-      sleep(0.05)
-      watied += 0.05
-      if key_triggered?(VK_F5)
-        puts "Trying reconnect..."
-        page = fetch(page.uri)
-        img_link = page.css("[@id='img']").first.attr('src')
-        if img_link == "https://ehgt.org/g/509.gif" || img_link == "https://exhentai.org/img/509.gif"
-          puts "The limit still has reached the maximum"
-        else
-          puts "Succeed!"
-          break
-        end
-      end
-    end # while waiting
-    page = fetch(page.uri)
-  end
-  return page
 end
 
 def input(msg='')
