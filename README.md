@@ -126,6 +126,14 @@ Below are contents of advanced search<br>
 	  # 手動輸入抓取的範圍
       # Manually enter crawling page range
 	  :set_start_page         => 0,
+
+	  # 下載原圖時的最久容忍秒數
+      # Maximum seconds to wait for downloading original image
+	  :timeout_original       => 30,
+
+	  # 一般下載時的最久容忍秒數
+      # Maximum seconds to wait for downloading normal image
+	  :timeout_normal         => 10,
 	}
   
 ### 從檔案下載 | Download from file
