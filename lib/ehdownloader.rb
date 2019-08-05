@@ -61,6 +61,8 @@ module EHentaiDownloader
       :fetch_sleep_time       => 10,
       :fetch_sleep_rrange     => 3,
       :set_start_page         => false,
+      :timeout_normal         => 10,
+      :timeout_original       => 30,
     }
     load_config_files()
     @agent_head.search_param = "#{get_search_param()}#{get_advsearch_param()}"
@@ -302,7 +304,8 @@ module EHentaiDownloader
 
   def collect_metas
     @agent_head.start_page = nil
-    total_pages = (@total_num / 25.0).ceil
+    results_per_page = @current_doc.links_with(href: /https:\/\/e(?:-|x)hentai.org\/g\//).uniq{|l| l.href}.size
+    total_pages = (@total_num / results_per_page.to_f).ceil
     puts "Total pages: #{total_pages}"
     _in_st = _in_ed = nil
     if @config[:set_start_page]
@@ -696,5 +699,10 @@ module EHentaiDownloader
 
   def rename_folder
     "#{@cur_folder}-#{@cur_meta['gid']}"
+  end
+
+  def get_timeout_duration
+    return @config[:timeout_original] if @config[:download_original]
+    return @config[:timeout_normal]
   end
 end

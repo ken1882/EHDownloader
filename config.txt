@@ -58,4 +58,8 @@
 
   # 手動輸入抓取的搜尋結果範圍
   :set_start_page         => 0,
+  
+  :timeout_normal         => 12,
+  :timeout_original       => 30,
+  :results_per_page 	  => 25,
 }

@@ -236,10 +236,12 @@ class Agent < Mechanize
 
   def wait4download()
     start_time = Time.now
+    timeout_duration = EHentaiDownloader.get_timeout_duration()
+    puts "Waiting for download (timeout=#{timeout_duration})"
     while @thread_lock
       sleep(0.3)
-      if (Time.now - start_time).to_f > 10
-        puts "#{@cur_page} timeouted ( > 10 sec)"
+      if (Time.now - start_time).to_f > timeout_duration
+        puts "#{@cur_page} timeouted ( > #{timeout_duration} sec)"
         Thread.kill(@worker)
         $mutex.synchronize{$failed_images << FailedImage.new(@cur_parent_url, @cur_page, @cur_folder)}
         @thread_lock = false

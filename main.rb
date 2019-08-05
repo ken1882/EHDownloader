@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 $:.unshift File.dirname($0)
 
-VERSION = "0.1.5"
+VERSION = "0.1.5p1"
 SPLIT_LINE = '-'*21 + 10.chr
 
 if ARGV.include?("-v") || ARGV.include?("--version")
