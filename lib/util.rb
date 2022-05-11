@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-require 'win32api'
+require 'win32/api'
 
-GetAsyncKeyState = Win32API.new('user32', "GetAsyncKeyState", 'i', 'i')
+GetAsyncKeyState = Win32::API.new('GetAsyncKeyState', 'I', 'I', 'user32')
 VK_F5 = 0x74
 
 $key_states = []

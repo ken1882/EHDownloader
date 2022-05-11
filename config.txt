@@ -14,9 +14,9 @@
       :arist_cg   => 1,
       :game_cg    => 1,
       :image_set  => 1,
-      :cosplay    => 0,
+      :cosplay    => 1,
       :asian_porn => 1,
-      :non_h      => 1,
+      :non_h      => 0,
       :western    => 1
     },
 
@@ -50,10 +50,10 @@
   # 每傳輸N次休息一次 (預設N=2)
   :fetch_loose_threshold  => 2,
 
-  # 每次休息秒數(預設10, 實際執行會再隨機+0~1秒)
+  # 每次休息秒數(預設2, 實際執行會再隨機+0~1秒)
   :fetch_sleep_time       => 2,
 
-  # 額外的隨機休息秒數增加(0~N秒, 預設3)
+  # 額外的隨機休息秒數增加(0~N秒, 預設0)
   :fetch_sleep_rrange     => 0,
 
   # 手動輸入抓取的搜尋結果範圍
@@ -61,5 +61,5 @@
   
   :timeout_normal         => 12,
   :timeout_original       => 30,
-  :results_per_page 	  => 25,
+  :results_per_page 	    => 25,
 }

@@ -147,8 +147,8 @@ class Agent < Mechanize
   def start_download(_wid, image_page_links)
     @flag_working = true
     @worker_id    = _wid
-    @cur_folder   = EHentaiDownloader.cur_folder
     @cur_gid      = EHentaiDownloader.cur_gid
+    @cur_folder   = EHentaiDownloader.cur_folder
     @cur_token    = EHentaiDownloader.cur_token
     last_url      = ''
     eval_action("Check previous progress...") do 
@@ -327,6 +327,7 @@ class Agent < Mechanize
   end
 
   # Check if banned, and wait if true
+  # TODO: Cross-platform way to get user input
   def check_wait_ban(page)
     delta_sec = 1.0 / InputFPS
     while page.links.size == 0

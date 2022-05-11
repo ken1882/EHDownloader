@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
+
+# =======================================================================
+# * The kernel module thoughout the program
+# -----------------------------------------------------------------------
+#   This module uses currently only uses two threads 
+# (`@agent_head` and `@agent_tail`) to download a gallery, and will 
+# collect gallery metadata first, then the image metadata in the gallery
+# and finally the images.
+# =======================================================================
 module EHentaiDownloader
-  mattr_reader :agent_head, :agent_tail, :config, :cur_folder, :total_num
+  mattr_reader :agent_head, :agent_tail, :config, :total_num
   mattr_reader :existed_json, :cookies, :current_doc, :new_json, :worker
   mattr_reader :cur_folder, :cur_gid, :cur_token
 
@@ -524,7 +533,7 @@ module EHentaiDownloader
       folder_name = @cur_meta['title']
     end
     folder_name.tr!('\\/:*?\"><|','')
-    return "#{DownloadFolder}#{folder_name}"
+    return "#{DownloadFolder}#{folder_name}_@#{@cur_gid}"
   end
 
   def build_gallery_folder()
@@ -698,7 +707,7 @@ module EHentaiDownloader
   end
 
   def rename_folder
-    "#{@cur_folder}-#{@cur_meta['gid']}"
+    "#{@cur_folder}+#{(rand*10**8).to_i}"
   end
 
   def get_timeout_duration
